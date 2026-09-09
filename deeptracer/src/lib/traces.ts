@@ -125,24 +125,28 @@ export async function getTraceById(traceId: string): Promise<Trace | null> {
 }
 
 export async function saveTrace(trace: Trace): Promise<boolean> {
-  const { error: traceError } = await supabase.from("traces").upsert({
+  console.log("Saving trace:", trace.traceId);
+  
+  const { data: traceData, error: traceError } = await supabase.from("traces").upsert({
     trace_id: trace.traceId,
     name: trace.name,
     status: trace.status,
     started_at: trace.startedAt,
     finished_at: trace.finishedAt || null,
     duration: trace.duration || null,
-  });
+  }).select();
 
   if (traceError) {
-    console.error("Error saving trace:", traceError);
+    console.error("Error saving trace:", traceError.message, traceError.details, traceError.hint);
     return false;
   }
+  
+  console.log("Trace saved:", traceData);
 
   for (const span of trace.spans) {
-    const { error: spanError } = await supabase.from("spans").upsert({
+    const { data: spanData, error: spanError } = await supabase.from("spans").upsert({
       span_id: span.id,
-      trace_id: span.traceId,
+      trace_id: trace.traceId,
       parent_id: span.parentId || null,
       name: span.name,
       type: span.type,
@@ -154,10 +158,12 @@ export async function saveTrace(trace: Trace): Promise<boolean> {
       input: span.input || null,
       output: span.output || null,
       error: span.error || null,
-    });
+    }).select();
 
     if (spanError) {
-      console.error("Error saving span:", spanError);
+      console.error("Error saving span:", spanError.message, spanError.details, spanError.hint);
+    } else {
+      console.log("Span saved:", spanData);
     }
   }
 
