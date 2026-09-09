@@ -64,9 +64,10 @@ AI Agent가 실패했을 때 어디서 문제가 시작되었는지 자동으로
 - 실시간 Trace 수집
 - Setup 가이드 페이지
 
-### ⏳ Feature 6: Regression Test 생성
-- Root Cause → Test Case 변환
-- MVP 후반 구현 예정
+### ✅ Feature 6: Regression Test 생성
+- Root Cause → Test Case 자동 변환
+- LLM 기반 테스트 코드 생성
+- Copy & Download 기능
 
 ---
 
@@ -175,8 +176,8 @@ log_user_prompt = true
 - [x] Auto Collection Endpoint (`/api/collect`)
 - [x] Setup 가이드 페이지
 
-### Phase 4: Enhancement (Next)
-- [ ] Regression Test 생성
+### Phase 4: Enhancement (In Progress)
+- [x] Regression Test 생성
 - [ ] 사용자 인증
 - [ ] 배포 (Vercel)
 
@@ -193,6 +194,7 @@ log_user_prompt = true
 | POST | `/api/collect` | OTLP Collector (자동 수집) |
 | POST | `/api/import` | 수동 Import |
 | POST | `/api/seed` | 샘플 데이터 로드 |
+| POST | `/api/generate-test` | Regression Test 생성 |
 
 ---
 

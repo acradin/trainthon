@@ -6,6 +6,7 @@ import { Trace, Span, RootCauseAnalysis } from "@/types/trace";
 import { MOCK_TRACES } from "@/data/mock-traces";
 import ExecutionGraph from "@/components/ExecutionGraph";
 import SpanDetail from "@/components/SpanDetail";
+import TestGenerator from "@/components/TestGenerator";
 
 interface PageProps {
   params: Promise<{ traceId: string }>;
@@ -34,6 +35,7 @@ export default function TraceDetailPage({ params }: PageProps) {
   const [analysis, setAnalysis] = useState<RootCauseAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [activeTab, setActiveTab] = useState<"graph" | "test">("graph");
 
   useEffect(() => {
     fetchTrace();
@@ -78,8 +80,8 @@ export default function TraceDetailPage({ params }: PageProps) {
     return trace.spans.find((s) => s.id === selectedSpanId) || null;
   }, [trace, selectedSpanId]);
 
-  const analyzeTrace = async () => {
-    if (!trace) return;
+  const analyzeTrace = async (): Promise<RootCauseAnalysis | null> => {
+    if (!trace) return null;
     setAnalyzing(true);
     try {
       const response = await fetch("/api/analyze", {
@@ -91,9 +93,12 @@ export default function TraceDetailPage({ params }: PageProps) {
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
         setShowAnalysis(true);
+        return data.analysis;
       }
+      return null;
     } catch (error) {
       console.error("Analysis failed:", error);
+      return null;
     } finally {
       setAnalyzing(false);
     }
@@ -185,11 +190,43 @@ export default function TraceDetailPage({ params }: PageProps) {
         </aside>
 
         <main className="flex-1 overflow-y-auto p-4">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-1">Execution Graph</h2>
-            <p className="text-sm text-slate-400">{trace.spans.length} spans • Click a span to view details</p>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setActiveTab("graph")}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  activeTab === "graph"
+                    ? "bg-slate-800 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                📊 Execution Graph
+              </button>
+              {trace.status === "failed" && (
+                <button
+                  onClick={() => setActiveTab("test")}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === "test"
+                      ? "bg-purple-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  🧪 Regression Test
+                </button>
+              )}
+            </div>
+            {activeTab === "graph" && (
+              <p className="text-sm text-slate-400">{trace.spans.length} spans • Click a span to view details</p>
+            )}
           </div>
-          <ExecutionGraph spans={trace.spans} selectedSpanId={selectedSpanId} onSelectSpan={setSelectedSpanId} />
+
+          {activeTab === "graph" && (
+            <ExecutionGraph spans={trace.spans} selectedSpanId={selectedSpanId} onSelectSpan={setSelectedSpanId} />
+          )}
+
+          {activeTab === "test" && trace.status === "failed" && (
+            <TestGenerator trace={trace} analysis={analysis} onAnalyze={analyzeTrace} />
+          )}
         </main>
 
         <aside className="w-96 bg-slate-900 border-l border-slate-800 shrink-0">

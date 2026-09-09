@@ -51,3 +51,16 @@ export interface AnalysisResponse {
   analysis?: RootCauseAnalysis;
   error?: string;
 }
+
+export interface GeneratedTest {
+  name: string;
+  description: string;
+  testType: "unit" | "integration" | "e2e";
+  framework: "vitest" | "jest" | "pytest";
+  code: string;
+  assertions: string[];
+  coverageTargets: {
+    spanName: string;
+    condition: string;
+  }[];
+}
