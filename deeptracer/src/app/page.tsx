@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import BrandLockup from "@/components/BrandLockup";
 import SourceLogo from "@/components/SourceLogo";
 import { landingCopy as t } from "@/lib/landing-copy";
@@ -17,7 +18,8 @@ function GitHubMark({ className }: { className?: string }) {
 }
 
 export default function HomePage() {
-  const [registered, setRegistered] = useState(false);
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -25,13 +27,17 @@ export default function HomePage() {
       try {
         const response = await fetch("/api/agents/discover");
         const data = await response.json();
-        setRegistered(Boolean(data.registry?.agents?.length));
+        if (data.registry?.agents?.length) {
+          router.replace("/recall");
+          return;
+        }
       } catch {
-        setRegistered(false);
+        // Show the landing if discovery fails.
       }
+      setReady(true);
     };
     void check();
-  }, []);
+  }, [router]);
 
   const copyInstall = async () => {
     try {
@@ -43,8 +49,16 @@ export default function HomePage() {
     }
   };
 
-  const ctaHref = registered ? "/dashboard" : "/onboard";
-  const ctaLabel = registered ? t.ctaOpen : t.ctaRegister;
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0b0b0c] text-[13px] text-zinc-500">
+        Loading…
+      </div>
+    );
+  }
+
+  const ctaHref = "/onboard";
+  const ctaLabel = t.ctaRegister;
 
   return (
     <div className="min-h-screen bg-[#0b0b0c] text-zinc-100">
@@ -71,7 +85,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="relative min-h-[28rem] overflow-hidden sm:min-h-[32rem]">
+      <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0" aria-hidden>
           <div className="absolute inset-y-0 right-0 w-full max-w-[1024px]">
             <Image
@@ -81,14 +95,14 @@ export default function HomePage() {
               priority
               unoptimized
               sizes="(max-width: 1024px) 100vw, 1024px"
-              className="object-cover object-center"
+              className="object-cover object-center opacity-70"
             />
           </div>
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0b0b0c] from-[12%] via-[#0b0b0c]/80 via-[38%] to-transparent to-[78%] sm:from-[18%] sm:via-[42%]" />
-          <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0b0b0c]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0b0b0c] from-[18%] via-[#0b0b0c]/88 via-[48%] to-[#0b0b0c]/55 to-[100%]" />
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#0b0b0c]" />
         </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-3xl px-4 pb-16 pt-16 sm:pb-20 sm:pt-20">
+        <div className="relative z-10 mx-auto w-full max-w-3xl px-4 pb-10 pt-14 sm:pb-12 sm:pt-16">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
             {t.eyebrow}
           </p>
@@ -98,69 +112,91 @@ export default function HomePage() {
             {t.headline[1]}
           </h1>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-zinc-400">{t.lead}</p>
-          <div className="mt-8 max-w-xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
-              {t.installLabel}
-            </p>
-            <pre className="mt-3 overflow-x-auto rounded-md border border-zinc-800 bg-[#111113]/90 px-4 py-3 font-mono text-[12px] leading-relaxed text-zinc-300">
-              {INSTALL_COMMAND}
-            </pre>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => void copyInstall()}
-                className="rounded-md bg-[#e0783a] px-4 py-2 text-[13px] font-medium text-zinc-950 hover:bg-[#ec8a4e]"
-              >
-                {copied ? t.copied : t.copyInstall}
-              </button>
-              <Link
-                href={ctaHref}
-                className="rounded-md border border-zinc-800 bg-[#0b0b0c]/50 px-4 py-2 text-[13px] text-zinc-300 transition-colors hover:border-zinc-600 hover:text-zinc-100"
-              >
-                {ctaLabel}
-              </Link>
-            </div>
-            <p className="mt-3 text-[12px] text-zinc-600">{t.localNote}</p>
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <Link
+              href={ctaHref}
+              className="rounded-md bg-[#e0783a] px-4 py-2 text-[13px] font-medium text-zinc-950 hover:bg-[#ec8a4e]"
+            >
+              {ctaLabel}
+            </Link>
+            <p className="text-[12px] text-zinc-600">{t.localNote}</p>
           </div>
         </div>
       </section>
 
       <main className="relative z-10 mx-auto w-full max-w-3xl px-4 pb-16">
-        <section className="grid gap-3 sm:grid-cols-2">
-          <article className="rounded-md border border-zinc-800/80 bg-[#111113] px-4 py-4">
-            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{t.whyTitle}</div>
-            <p className="mt-2 text-[13px] leading-relaxed text-zinc-300">
-              {t.whyBefore}
-              <span className="font-mono text-[12px] text-zinc-400">~/.claude</span>
-              {", "}
-              <span className="font-mono text-[12px] text-zinc-400">~/.codex</span>
-              {t.whyOr}
-              <span className="font-mono text-[12px] text-zinc-400">~/.cursor</span>
-              {t.whyAfter}
-            </p>
+        <section className="rounded-md border border-zinc-800/80 bg-[#111113] px-4 py-5 sm:px-5">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            {t.recallLabel}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1 rounded-md border border-zinc-800/80 bg-[#0b0b0c] px-3 py-2 text-[13px] text-zinc-200">
+              {t.recallQuery}
+            </div>
+            <div className="rounded-md bg-[#e0783a] px-3 py-2 text-[13px] font-medium text-zinc-950">
+              {t.recallAsk}
+            </div>
+          </div>
+          <article className="mt-4 rounded-md border border-zinc-800/80 bg-[#0b0b0c] px-4 py-4">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              {t.alreadyFound}
+            </div>
+            <p className="mt-2 text-[14px] leading-relaxed text-zinc-200">{t.recallAnswer}</p>
           </article>
-          <article className="rounded-md border border-zinc-800/80 bg-[#111113] px-4 py-4">
-            <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{t.whoTitle}</div>
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-[13px] text-zinc-300">
-                <SourceLogo source="claude-code" className="h-4 w-4 text-zinc-300" />
-                {t.whoClaude}
-              </div>
-              <div className="flex items-center gap-2 text-[13px] text-zinc-300">
-                <SourceLogo source="codex" className="h-4 w-4 text-zinc-300" />
-                {t.whoGpt}
-              </div>
-              <div className="flex items-center gap-2 text-[13px] text-zinc-300">
-                <SourceLogo source="cursor" className="h-4 w-4 text-zinc-300" />
-                {t.whoCursor}
+          <div className="mt-4 overflow-hidden rounded-md border border-zinc-800/80 bg-[#0b0b0c]">
+            <header className="border-b border-zinc-800/80 bg-[#17171a] px-4 py-2.5 text-[11px] text-zinc-500">
+              {t.receiptsLabel}
+            </header>
+            <div className="flex items-start gap-3 border-b border-zinc-800/50 px-4 py-2.5">
+              <SourceLogo source="claude-code" className="mt-1 h-3.5 w-3.5 shrink-0 text-zinc-500" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] text-zinc-200">{t.recallHit1}</div>
+                <div className="mt-0.5 text-[12px] text-zinc-500">{t.recallHit1Meta}</div>
               </div>
             </div>
-            <p className="mt-3 text-[12px] leading-relaxed text-zinc-500">{t.whoNote}</p>
-          </article>
+            <div className="flex items-start gap-3 px-4 py-2.5">
+              <SourceLogo source="cursor" className="mt-1 h-3.5 w-3.5 shrink-0 text-zinc-500" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] text-zinc-200">{t.recallHit2}</div>
+                <div className="mt-0.5 text-[12px] text-zinc-500">{t.recallHit2Meta}</div>
+              </div>
+            </div>
+          </div>
+          <p className="mt-4 text-center text-[11px] text-zinc-600">{t.sketchCaption}</p>
+        </section>
+
+        <section className="mt-10 rounded-md border border-zinc-800/80 bg-[#111113] px-4 py-4">
+          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6">
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{t.whoTitle}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <div className="flex items-center gap-1.5 text-[13px] text-zinc-300">
+                  <SourceLogo source="claude-code" className="h-3.5 w-3.5 text-zinc-300" />
+                  {t.whoClaude}
+                </div>
+                <div className="flex items-center gap-1.5 text-[13px] text-zinc-300">
+                  <SourceLogo source="codex" className="h-3.5 w-3.5 text-zinc-300" />
+                  {t.whoGpt}
+                </div>
+                <div className="flex items-center gap-1.5 text-[13px] text-zinc-300">
+                  <SourceLogo source="cursor" className="h-3.5 w-3.5 text-zinc-300" />
+                  {t.whoCursor}
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">{t.whyTitle}</div>
+              <p className="mt-2 text-[13px] leading-snug text-zinc-300">{t.whyBody}</p>
+              <p className="mt-1.5 font-mono text-[11px] leading-snug text-zinc-500">
+                ~/.claude · ~/.codex · ~/.cursor
+              </p>
+            </div>
+          </div>
         </section>
 
         <section className="mt-14">
           <h2 className="text-[14px] font-medium">{t.howTitle}</h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-zinc-400">{t.howLead}</p>
           <ol className="mt-4 space-y-4">
             {t.steps.map((item) => (
               <li key={item.step} className="flex gap-4 border-t border-zinc-800/80 pt-4">
@@ -175,36 +211,20 @@ export default function HomePage() {
         </section>
 
         <section className="mt-14">
-          <h2 className="text-[14px] font-medium">{t.seeTitle}</h2>
-          <p className="mt-2 text-[13px] leading-relaxed text-zinc-400">{t.seeBody}</p>
-          <div className="mt-5 rounded-md border border-zinc-800/80 bg-[#111113] px-4 py-6">
-            <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-[12px]">
-              <div className="rounded-md border border-zinc-700 bg-[#141416] px-3 py-2 text-zinc-200">
-                {t.sketchOrchestrator}
-              </div>
-              <div className="h-4 w-px bg-zinc-700" />
-              <div className="flex w-full justify-center gap-10">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-md border border-zinc-700 bg-[#141416] px-3 py-2 text-zinc-300">
-                    {t.sketchResearch}
-                  </div>
-                  <div className="h-4 w-px bg-zinc-700" />
-                  <div className="rounded-md border border-zinc-700 bg-[#141416] px-3 py-2 text-zinc-400">
-                    {t.sketchSource}
-                  </div>
-                </div>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-md border border-zinc-700 bg-[#141416] px-3 py-2 text-zinc-300">
-                    {t.sketchBrowser}
-                  </div>
-                  <div className="h-4 w-px bg-zinc-700" />
-                  <div className="rounded-md border border-l-amber-500/70 border-zinc-700 bg-[#141416] px-3 py-2 text-zinc-400">
-                    {t.sketchTable}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p className="mt-5 text-center text-[11px] text-zinc-600">{t.sketchCaption}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+            {t.installLabel}
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-md border border-zinc-800 bg-[#111113] px-4 py-3 font-mono text-[12px] leading-relaxed text-zinc-300">
+            {INSTALL_COMMAND}
+          </pre>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void copyInstall()}
+              className="rounded-md border border-zinc-800 px-4 py-2 text-[13px] text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
+            >
+              {copied ? t.copied : t.copyInstall}
+            </button>
           </div>
         </section>
 

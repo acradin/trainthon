@@ -50,8 +50,8 @@ export default function OnboardPage() {
         setError(data.error || "Could not scan this machine.");
         return;
       }
-      if (data.registry?.agents.length) {
-        router.replace("/dashboard");
+        if (data.registry?.agents.length) {
+        router.replace("/recall");
         return;
       }
       setHomeDir(data.homeDir || "");
@@ -111,7 +111,7 @@ export default function OnboardPage() {
         })
       );
 
-      router.push("/dashboard");
+      router.push("/recall");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -133,7 +133,7 @@ export default function OnboardPage() {
         <h1 className="mt-2 text-[22px] font-medium tracking-tight">Register agents on this machine</h1>
         <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-zinc-500">
           DeepTracer reads local Claude, GPT, and Cursor session logs. You don’t upload traces — register an agent,
-          then we scan and analyze recent runs automatically.
+          then we archive recent runs so you can ask what this machine already found.
         </p>
         <p className="mt-3 font-mono text-[11px] text-zinc-600">{statusText}{homeDir ? ` · ${homeDir}` : ""}</p>
 

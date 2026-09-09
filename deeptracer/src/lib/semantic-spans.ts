@@ -307,7 +307,9 @@ function mergeGroup(items: Span[], family: SemanticFamily | null): Span {
           family,
           obtained,
           attempts: items.length,
+          spanIds: items.map((item) => item.id),
           calls: items.map((item) => ({
+            id: item.id,
             name: item.name,
             status: item.status,
             error: item.error,
@@ -706,6 +708,27 @@ export function displaySpans(trace: Trace): Span[] {
     return trace.semanticGraph!.spans;
   }
   return collapseSemanticSpans(prepareSpans(trace.spans));
+}
+
+export function resolveDisplaySpan(spans: Span[], spanId: string | null): Span | null {
+  if (!spanId) return null;
+  const direct = spans.find((span) => span.id === spanId);
+  if (direct) return direct;
+  return (
+    spans.find((span) => {
+      const output = asRecord(span.output);
+      const ids = output?.spanIds;
+      if (Array.isArray(ids) && ids.some((id) => id === spanId)) return true;
+      const calls = output?.calls;
+      if (
+        Array.isArray(calls) &&
+        calls.some((call) => asRecord(call)?.id === spanId)
+      ) {
+        return true;
+      }
+      return false;
+    }) ?? null
+  );
 }
 
 export function presentTrace(trace: Trace): Trace {

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PRODUCT_TAGLINE } from "@/lib/site";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DeepTracer",
   applicationName: "DeepTracer",
-  description: "Don't debug the output. Trace the cause.",
+  description: PRODUCT_TAGLINE,
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "48x48" },

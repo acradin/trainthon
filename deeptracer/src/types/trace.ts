@@ -63,6 +63,23 @@ export interface AnalysisResponse {
   error?: string;
 }
 
+export interface RecallHit {
+  traceId: string;
+  traceName: string;
+  project?: string;
+  source?: Trace["source"];
+  startedAt: string;
+  spanId: string;
+  spanName: string;
+  reason: string;
+}
+
+export interface RecallResult {
+  answer: string;
+  hits: RecallHit[];
+  mode: "llm" | "lexical";
+}
+
 export interface GeneratedTest {
   name: string;
   description: string;

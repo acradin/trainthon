@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
 
+import { PRODUCT_TAGLINE } from "@/lib/site";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "DeepTracer",
     short_name: "DeepTracer",
-    description: "Don't debug the output. Trace the cause.",
+    description: PRODUCT_TAGLINE,
     start_url: "/",
     display: "standalone",
     background_color: "#0b0b0c",

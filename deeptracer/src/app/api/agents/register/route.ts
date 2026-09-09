@@ -3,6 +3,7 @@ import { AgentId, AgentRegistry, RegisteredAgent } from "@/lib/agents/types";
 import { discoverAgents } from "@/lib/agents/discover";
 import { getRegistry, saveRegistry } from "@/lib/local-store";
 import { syncRegisteredAgents } from "@/lib/agents/sync";
+import { scheduleCompressMissing } from "@/lib/semantic-graph";
 
 export const runtime = "nodejs";
 
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
     saveRegistry(registry);
 
     const sync = body.sync === false ? null : await syncRegisteredAgents(agents);
+    if (sync) scheduleCompressMissing();
 
     return NextResponse.json({
       success: true,

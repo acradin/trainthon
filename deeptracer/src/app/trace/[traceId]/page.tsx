@@ -10,7 +10,7 @@ import Inspector from "@/components/dag/Inspector";
 import Timeline from "@/components/dag/Timeline";
 import TestGenerator from "@/components/TestGenerator";
 import SourceLogo, { sourceShortLabel } from "@/components/SourceLogo";
-import { presentTrace, semanticGraphMatches } from "@/lib/semantic-spans";
+import { presentTrace, resolveDisplaySpan, semanticGraphMatches } from "@/lib/semantic-spans";
 import { inferProject, inferTraceSource } from "@/lib/trace-source";
 
 interface PageProps {
@@ -58,6 +58,8 @@ export default function TraceDetailPage({ params }: PageProps) {
         }
         setTrace(presentTrace(raw));
         setGraphStatus(semanticGraphMatches(raw) && raw.semanticGraph?.model !== "heuristic" ? "ready" : "building");
+        const span = new URLSearchParams(window.location.search).get("span");
+        if (span) setSelectedSpanId(span);
       };
       try {
         const response = await fetch(`/api/traces/${traceId}`);
@@ -105,9 +107,17 @@ export default function TraceDetailPage({ params }: PageProps) {
     };
   }, [trace?.traceId, graphStatus]);
 
+  useEffect(() => {
+    if (!trace || !selectedSpanId) return;
+    const resolved = resolveDisplaySpan(trace.spans, selectedSpanId);
+    if (resolved && resolved.id !== selectedSpanId) {
+      setSelectedSpanId(resolved.id);
+    }
+  }, [trace, selectedSpanId]);
+
   const selectedSpan: Span | null = useMemo(() => {
     if (!trace || !selectedSpanId) return null;
-    return trace.spans.find((span) => span.id === selectedSpanId) || null;
+    return resolveDisplaySpan(trace.spans, selectedSpanId);
   }, [trace, selectedSpanId]);
 
   const analyzeTrace = async (): Promise<RootCauseAnalysis | null> => {
@@ -150,8 +160,8 @@ export default function TraceDetailPage({ params }: PageProps) {
       <div className="flex h-screen flex-col items-center justify-center bg-[#0b0b0c] text-zinc-200">
         <h1 className="text-lg font-medium">Run not found</h1>
         <p className="mt-1 text-sm text-zinc-500">{traceId}</p>
-        <Link href="/dashboard" className="mt-4 text-sm text-zinc-400 hover:text-zinc-200">
-          ← Runs
+        <Link href="/recall" className="mt-4 text-sm text-zinc-400 hover:text-zinc-200">
+          ← Recall
         </Link>
       </div>
     );
@@ -167,6 +177,10 @@ export default function TraceDetailPage({ params }: PageProps) {
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
         <div className="flex min-w-0 items-center gap-3">
           <BrandLockup compact />
+          <span className="text-zinc-800">/</span>
+          <Link href="/recall" className="text-[13px] text-zinc-500 hover:text-zinc-200">
+            Recall
+          </Link>
           <span className="text-zinc-800">/</span>
           <Link href="/dashboard" className="text-[13px] text-zinc-500 hover:text-zinc-200">
             Runs

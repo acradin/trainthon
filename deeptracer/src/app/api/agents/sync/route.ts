@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRegistry } from "@/lib/local-store";
 import { syncRegisteredAgents } from "@/lib/agents/sync";
+import { scheduleCompressMissing } from "@/lib/semantic-graph";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,7 @@ export async function POST() {
     }
 
     const sync = await syncRegisteredAgents(registry.agents);
+    scheduleCompressMissing();
     return NextResponse.json({ success: true, sync, registry: getRegistry() });
   } catch (error) {
     return NextResponse.json(

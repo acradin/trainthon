@@ -28,7 +28,7 @@ Agents forget each other. Claude’s session does not see Codex. Cursor does not
 It is not a JSON paste box. You register desktop agents. A local Next.js server reads session files here:
 
 ```text
-Register agents  →  archive sessions  →  meaning graph  →  receipt DAG
+Register agents  →  archive sessions  →  meaning graph  →  recall  →  receipt DAG
 ```
 
 A hosted Vercel/Netlify site cannot open `~/.claude`, `~/.codex`, or `~/.cursor`. That is the product, not a limitation to work around.
@@ -78,8 +78,9 @@ Review intent and meaning-graph compression use OpenAI when a key is present. Wi
 
 | Path | Role |
 | --- | --- |
-| `/` | Product landing |
+| `/` | Product landing (Recall-first). Registered visits go to `/recall` |
 | `/onboard` | Register desktop agents |
+| `/recall` | Ask what this machine already found |
 | `/dashboard` | Runs, grouped by project |
 | `/trace/[id]` | Meaning graph (receipt), Inspector, Timeline |
 | `/agents` | Status + Scan now |

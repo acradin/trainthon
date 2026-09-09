@@ -10,7 +10,7 @@ import {
   type SemanticFamily,
   type SemanticNodePlan,
 } from "@/lib/semantic-spans";
-import { getTraceById, saveTrace } from "@/lib/traces";
+import { getTraceById, getTraces, saveTrace } from "@/lib/traces";
 
 const DEFAULT_MODEL = "gpt-5.6-luna";
 const FALLBACK_MODEL = "gpt-4o";
@@ -255,4 +255,37 @@ export async function buildAndStoreSemanticGraph(
 
   inflight.set(key, job);
   return job;
+}
+
+const BACKGROUND_COMPRESS_LIMIT = 4;
+
+function needsCompress(trace: Trace): boolean {
+  if (!trace.spans?.length) return false;
+  if (!semanticGraphMatches(trace)) return true;
+  return Boolean(process.env.OPENAI_API_KEY && trace.semanticGraph?.model === "heuristic");
+}
+
+export async function compressMissingGraphs(limit = BACKGROUND_COMPRESS_LIMIT): Promise<number> {
+  const traces = await getTraces();
+  const pending = traces
+    .filter(needsCompress)
+    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+    .slice(0, Math.max(0, limit));
+
+  let done = 0;
+  for (const trace of pending) {
+    try {
+      await buildAndStoreSemanticGraph(trace.traceId, false);
+      done += 1;
+    } catch (error) {
+      console.error("Background compress failed:", trace.traceId, error);
+    }
+  }
+  return done;
+}
+
+export function scheduleCompressMissing(limit = BACKGROUND_COMPRESS_LIMIT): void {
+  void compressMissingGraphs(limit).catch((error) => {
+    console.error("Background compress failed:", error);
+  });
 }

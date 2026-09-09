@@ -3,7 +3,7 @@
 **Remember what your agents already found.**
 
 - Version: v0.4
-- Status: Pivot in progress (ingest + meaning graph shipped; recall is next)
+- Status: v0.4 layers shipped (archive, compress, recall)
 - Product Type: Local-first personal memory over desktop AI agent runs
 
 ---
@@ -40,8 +40,8 @@ v0.3은 “실패 run을 디버깅하는 observability”였다. v0.4는 그 파
 
 - 사용자는 JSON을 붙여넣는 대신 **에이전트를 등록**한다.
 - 스캔은 원본 로그를 `~/.deeptracer`에 아카이브한다.
-- 첫 열람 때 LLM(없으면 휴리스틱)이 의미 그래프를 만들어 저장한다.
-- 다음 단계는 그 그래프를 인덱스로 **회수**하는 것이다. 디버그 DAG는 유지하되 홈이 아니다.
+- 스캔 직후(그리고 런을 처음 열 때) LLM(없으면 휴리스틱)이 의미 그래프를 만들어 저장한다.
+- 그 그래프를 인덱스로 **회수**한다. 디버그 DAG는 영수증으로 남는다.
 
 > DeepTracer는 **local-first**다. 로그는 이 앱이 실행 중인 컴퓨터에서만 읽는다. Vercel 같은 클라우드 배포본은 사용자 PC의 `~/.claude`, `~/.codex`, `~/.cursor`에 접근하지 못한다.
 >
@@ -97,7 +97,7 @@ v0.3은 “실패 run을 디버깅하는 observability”였다. v0.4는 그 파
 
 ### ✅ Feature 4: Meaning graph (Compress)
 - 노드는 도구 이름이 아니라 **그 스텝이 얻어낸 것** (소스, 파일, 페이지, 결정)
-- 런을 처음 열면 LLM이 의미 단위로 묶고 `semanticGraph`로 저장. 다음은 저장된 그래프를 연다
+- 스캔 직후 최근 run을 백그라운드 압축. 런을 처음 열어도 없으면 그때 빌드. `semanticGraph`로 저장
 - API 키가 없으면 파일·URL·쿼리 기준 휴리스틱
 - Context(주입된 AGENTS.md, 플러그인, 하네스)는 DAG에서 분리
 - React Flow canvas, Inspector, Timeline. DAG는 영수증이지 워크플로 에디터가 아님
@@ -113,11 +113,12 @@ v0.3은 “실패 run을 디버깅하는 observability”였다. v0.4는 그 파
 - `/api/collect`, `/import`, `/setup`
 - 기본 UX가 아님
 
-### ◻ Feature 8: Recall (다음)
+### ✅ Feature 8: Recall
 - 질문: 이 머신의 런을 상대로 “X에 대해 이미 뭘 알아냈지 / 뭘 결정했지”
-- 답은 의미 노드와 원본 span으로 연결 (영수증)
+- 답은 의미 노드와 원본 span으로 연결 (영수증, `/trace/[id]?span=`)
 - Claude에서 찾은 소스를 Cursor가 다시 검색하지 않게 하는 것이 성공
 - 범용 채팅 메모리 UI가 아님. 쿼리 → 근거 run
+- 내비 첫 항목. 등록된 재방문 CTA는 Ask this machine
 
 ### ◻ Feature 9: 사용자 인증
 - 미구현. 로컬 사용이 기본이라 후순위
@@ -135,18 +136,18 @@ Agent 등록
 Scan
   - 원본 세션 → Trace archive (~/.deeptracer)
         ↓
-Runs
-  - 프로젝트별 목록. 필터 유지
+Recall
+  - “X는 이미 다뤘나” → 답 + 해당 노드
         ↓
 Meaning graph (영수증)
-  - 첫 열람: 의미 단위로 압축해 저장
+  - 스캔 직후 또는 첫 열람: 의미 단위로 압축해 저장
   - Inspector = 얻어낸 결과
         ↓
-(다음) Recall
-  - “X는 이미 다뤘나” → 답 + 해당 노드
+Runs
+  - 프로젝트별 목록. 필터 유지
 ```
 
-재방문 시 등록이 있으면 Runs로 간다. Recall이 붙으면 홈은 쿼리가 되고 Runs/DAG는 근거로 남는다.
+재방문 시 등록이 있으면 Recall로 간다. Runs/DAG는 근거다.
 
 ---
 
@@ -269,13 +270,13 @@ Meaning graph (영수증)
 - [x] 원본 span 유지 (import 시 패밀리 collapse 하지 않음)
 - [x] LLM 의미 그래프 컴파일 + 저장 (`POST /api/traces/[id]/semantic`)
 - [x] 휴리스틱 fallback (파일 / URL / 쿼리)
-- [ ] 스캔 직후 백그라운드 압축 (지금은 런을 처음 열 때)
+- [x] 스캔 직후 백그라운드 압축 (최근 4개, 응답을 막지 않음)
 
-### Phase 4: Recall (다음)
-- [ ] 의미 그래프 인덱스
-- [ ] “이미 알아낸 것 / 결정한 것” 쿼리
-- [ ] 답 → 런/노드 영수증
-- [ ] 홈을 Recall로 둘지, Runs를 유지할지는 쿼리가 쓰인 뒤에 정한다
+### Phase 4: Recall
+- [x] 의미 그래프 인덱스
+- [x] “이미 알아낸 것 / 결정한 것” 쿼리
+- [x] 답 → 런/노드 영수증 (`/trace/[id]?span=`)
+- [x] 내비 첫 항목을 Recall로. Runs는 근거 목록
 
 ### Phase 5: Platform
 - [x] Regression Test 생성
@@ -291,7 +292,8 @@ Meaning graph (영수증)
 |--------|----------|-------------|
 | GET | `/api/agents/discover` | Claude / GPT / Cursor 탐지 |
 | POST | `/api/agents/register` | 등록 후 스캔 |
-| POST | `/api/agents/sync` | 재스캔 (원본 archive) |
+| POST | `/api/agents/sync` | 재스캔 (원본 archive) 후 백그라운드 압축 |
+| POST | `/api/recall` | 아카이브 쿼리 (답 + 영수증) |
 | GET | `/api/traces` | Trace 목록 |
 | POST | `/api/traces` | Trace 저장 |
 | GET | `/api/traces/[traceId]` | 원본 Trace |
@@ -308,16 +310,17 @@ Meaning graph (영수증)
 
 | Path | Description |
 |------|-------------|
-| `/` | 랜딩. 등록되어 있으면 Open Runs |
-| `/onboard` | 데스크톱 agent 등록 |
+| `/` | 랜딩(질문 + 영수증 스케치). 등록되어 있으면 `/recall`로 이동 |
+| `/onboard` | 데스크톱 agent 등록. 끝나면 Recall |
+| `/recall` | 이 머신에 이미 알아낸 것 / 결정한 것 |
 | `/dashboard` | Runs. 미등록이면 랜딩 |
-| `/trace/[id]` | 의미 그래프 영수증 + Inspector + Timeline |
+| `/trace/[id]` | 의미 그래프 영수증 + Inspector + Timeline. `?span=` 로 노드 선택 |
 | `/agents` | 상태 + Scan now |
 | `/analyze` | JSON 분석 (보조) |
 | `/import`, `/setup` | 수동 / OTLP (보조) |
 | `/privacy`, `/terms` | 법적 고지 |
 
-기본 내비: **Runs / Agents / Analyze**. Recall이 붙으면 내비의 첫 항목이 쿼리가 된다.
+기본 내비: **Recall / Runs / Agents**. Analyze는 보조 경로로 남는다.
 
 ---
 
@@ -328,12 +331,12 @@ Meaning graph (영수증)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
-# 의미 그래프 압축 + intent review
+# 의미 그래프 압축 + recall + intent review
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-luna
 ```
 
-키 없이 스캔과 휴리스틱 그래프는 동작한다. 의미 단위 압축과 Review intent는 키가 있을 때 품질이 난다.
+키 없이 스캔, 휴리스틱 그래프, 어휘 Recall은 동작한다. 의미 단위 압축, LLM Recall, Review intent는 키가 있을 때 품질이 난다.
 
 ```bash
 cd deeptracer

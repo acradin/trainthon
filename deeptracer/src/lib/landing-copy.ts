@@ -1,6 +1,5 @@
 export type LandingCopy = {
   ctaRegister: string;
-  ctaOpen: string;
   github: string;
   eyebrow: string;
   headline: [string, string];
@@ -10,75 +9,74 @@ export type LandingCopy = {
   copied: string;
   localNote: string;
   whyTitle: string;
-  whyBefore: string;
-  whyOr: string;
-  whyAfter: string;
+  whyBody: string;
   whoTitle: string;
   whoClaude: string;
   whoGpt: string;
   whoCursor: string;
-  whoNote: string;
   howTitle: string;
+  howLead: string;
   steps: Array<{ step: string; title: string; body: string }>;
-  seeTitle: string;
-  seeBody: string;
-  sketchOrchestrator: string;
-  sketchResearch: string;
-  sketchSource: string;
-  sketchBrowser: string;
-  sketchTable: string;
+  recallLabel: string;
+  recallQuery: string;
+  recallAsk: string;
+  alreadyFound: string;
+  recallAnswer: string;
+  receiptsLabel: string;
+  recallHit1: string;
+  recallHit1Meta: string;
+  recallHit2: string;
+  recallHit2Meta: string;
   sketchCaption: string;
   footer: string;
 };
 
 export const landingCopy: LandingCopy = {
   ctaRegister: "Register agents",
-  ctaOpen: "Open Runs",
   github: "GitHub",
-  eyebrow: "Local agent debugger",
-  headline: ["Don’t debug the output.", "Trace the cause."],
-  lead: "DeepTracer reads Claude, GPT, and Cursor session logs on this computer and opens each run as an execution graph. You follow the branch that went off intent — not the last message the agent printed.",
-  installLabel: "Install on this machine",
+  eyebrow: "Local agent memory",
+  headline: ["Remember what your agents", "already found."],
+  lead: "Claude, GPT, and Cursor on this PC do not share a memory. Ask what they already found or decided. Open a receipt only when you need the source.",
+  installLabel: "Run on this machine",
   copyInstall: "Copy install",
   copied: "Copied",
-  localNote: "Requires Node.js. Open http://localhost:3000, then register the desktop agents on this PC.",
-  whyTitle: "Why desktop",
-  whyBefore:
-    "Claude, Codex, and Cursor write sessions to disk. Vercel or Netlify cannot open ",
-  whyOr: ", or ",
-  whyAfter:
-    ". DeepTracer has to sit next to those apps — first as a local server, then as a desktop app.",
-  whoTitle: "Who it reads",
-  whoClaude: "Claude desktop on this PC",
-  whoGpt: "GPT / Codex desktop on this PC",
-  whoCursor: "Cursor desktop on this PC",
-  whoNote: "Only installed desktop agents are listed. Credentials and auth files are ignored.",
-  howTitle: "How it works",
+  localNote: "Requires Node.js. After you register, the home is a question — not a log list.",
+  whyTitle: "Why this machine",
+  whyBody: "A hosted site cannot open these folders. Memory stays here.",
+  whoTitle: "Who",
+  whoClaude: "Claude",
+  whoGpt: "GPT",
+  whoCursor: "Cursor",
+  howTitle: "Underneath the question",
+  howLead: "You ask. Archive and compress stay in the background. The graph is a receipt, not the home.",
   steps: [
     {
       step: "01",
-      title: "Register agents",
-      body: "DeepTracer finds Claude, GPT, and Cursor desktop apps on this machine. You choose which logs to scan.",
+      title: "Archive",
+      body: "Register Claude, GPT, and Cursor. Recent sessions are kept on this machine so the next question has something to search.",
     },
     {
       step: "02",
-      title: "Runs by project",
-      body: "Recent sessions become runs, grouped by agent and working directory. Search and sort without uploading JSON.",
+      title: "Compress",
+      body: "Tool calls collapse into what a step obtained: a source, a file, a page, a decision. Not Search ×4.",
     },
     {
       step: "03",
-      title: "Follow the graph",
-      body: "A run opens as a DAG. Nodes are what a step obtained, not which tool was called. Inspector shows the result; Review intent finds where it drifted.",
+      title: "Recall",
+      body: "That is the daily surface. The answer points at a node. Open the DAG only when the memory needs a source.",
     },
   ],
-  seeTitle: "What you see",
-  seeBody:
-    "The canvas is a map of the run. Sub-agents stay as branches. Repeated tools collapse into the thing they got — a pricing source, a file, a page — not Search ×4.",
-  sketchOrchestrator: "Orchestrator",
-  sketchResearch: "Research",
-  sketchSource: "Vendor A pricing",
-  sketchBrowser: "Browser",
-  sketchTable: "Pricing table",
-  sketchCaption: "Research obtained a source. Browser never got the table. That is the cause.",
-  footer: "Clone the repo, run it on this computer, then register the desktop agents you already use.",
+  recallLabel: "Ask this machine",
+  recallQuery: "What did we already find about Outstatic?",
+  recallAsk: "Ask",
+  alreadyFound: "Already found",
+  recallAnswer:
+    "Claude already pulled the Outstatic docs. Cursor treated it as a git-based CMS. You do not need to search it again.",
+  receiptsLabel: "Receipts",
+  recallHit1: "Outstatic docs",
+  recallHit1Meta: "Claude · 2d ago",
+  recallHit2: "Git-based CMS",
+  recallHit2Meta: "Cursor · receipt",
+  sketchCaption: "Same machine. Different agents. One answer.",
+  footer: "Clone the repo, run it here, register the agents you already use, then ask. Memory stays on this computer.",
 };
