@@ -57,6 +57,32 @@ function sessionIdFromFile(filePath: string): string {
   return name.replace(/[^a-zA-Z0-9]/g, "").slice(-12);
 }
 
+function asToolName(payload: JsonRecord, fallback: string): string {
+  if (typeof payload.name === "string" && payload.name.trim()) return payload.name.trim();
+  const action = asRecord(payload.action);
+  if (typeof action?.type === "string" && action.type.trim()) return action.type.trim();
+  if (typeof action?.name === "string" && action.name.trim()) return action.name.trim();
+  if (action && (action.query || action.url)) return "web_search";
+  return fallback.replace(/_/g, " ");
+}
+
+function asToolInput(payload: JsonRecord): Span["input"] {
+  const fromArgs = asRecord(payload.arguments);
+  if (fromArgs) return fromArgs;
+  if (typeof payload.arguments === "string") {
+    try {
+      const parsed = JSON.parse(payload.arguments);
+      const rec = asRecord(parsed);
+      if (rec) return rec;
+      return { input: truncate(payload.arguments) };
+    } catch {
+      return { input: truncate(payload.arguments) };
+    }
+  }
+  if (typeof payload.input === "string") return { input: truncate(payload.input) };
+  return asRecord(payload.action) ?? undefined;
+}
+
 function cwdFromRows(rows: JsonRecord[]): string | undefined {
   for (const row of rows) {
     const payload = asRecord(row.payload);
@@ -193,13 +219,12 @@ export function importCodexSessionFile(filePath: string): Trace | null {
           id: callId,
           traceId,
           parentId: rootId,
-          name: String(payload.name || payload.action || itemType.replace(/_/g, " ")),
+          name: asToolName(payload, itemType),
           type: "tool",
           agent: "Codex",
           status: "running",
           startedAt: ts,
-          input: asRecord(payload.arguments)
-            ?? (typeof payload.input === "string" ? { input: truncate(payload.input) } : asRecord(payload.action) ?? undefined),
+          input: asToolInput(payload),
         };
         callSpans.set(callId, span);
         push(span);

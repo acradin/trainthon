@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import type { AgentId, DiscoveredAgent, SyncResult } from "@/lib/agents/types";
+import BrandLockup from "@/components/BrandLockup";
 import SourceLogo from "@/components/SourceLogo";
 
 interface DiscoverResponse {
@@ -122,9 +122,7 @@ export default function OnboardPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#0b0b0c] text-zinc-100">
       <header className="flex h-12 items-center justify-between border-b border-zinc-800/80 px-4">
-        <Link href="/" className="flex items-center" aria-label="deeptracer">
-          <Image src="/logo-dark.png" alt="deeptracer" width={154} height={40} className="h-7 w-auto" priority />
-        </Link>
+        <BrandLockup />
         <Link href="/" className="text-[12px] text-zinc-500 hover:text-zinc-200">
           ← About
         </Link>

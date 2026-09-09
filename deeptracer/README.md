@@ -2,7 +2,7 @@
 
 App directory for [DeepTracer](https://github.com/acradin/trainthon).
 
-**Don’t debug the output. Trace the cause.**
+**Remember what your agents already found.**
 
 Product docs and the public README live at the repo root: [../README.md](../README.md).
 

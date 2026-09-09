@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Trace } from "@/types/trace";
 import { AgentRegistry } from "@/lib/agents/types";
+import { spanSourceHash } from "@/lib/semantic-spans";
 
 const DIR = join(homedir(), ".deeptracer");
 const TRACES_PATH = join(DIR, "traces.json");
@@ -29,9 +30,19 @@ export function getLocalTraces(): Trace[] {
 
 export function saveLocalTrace(trace: Trace): void {
   ensureDir();
-  const traces = getLocalTraces().filter((item) => item.traceId !== trace.traceId);
-  traces.unshift(trace);
-  writeFileSync(TRACES_PATH, JSON.stringify(traces, null, 2), "utf8");
+  const traces = getLocalTraces();
+  const existing = traces.find((item) => item.traceId === trace.traceId);
+  const next: Trace = { ...trace };
+  if (!next.semanticGraph && existing?.semanticGraph) {
+    if (existing.semanticGraph.sourceHash === spanSourceHash(next.spans)) {
+      next.semanticGraph = existing.semanticGraph;
+    }
+  }
+  writeFileSync(
+    TRACES_PATH,
+    JSON.stringify([next, ...traces.filter((item) => item.traceId !== next.traceId)], null, 2),
+    "utf8"
+  );
 }
 
 export function getLocalTraceById(traceId: string): Trace | null {

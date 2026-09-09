@@ -14,7 +14,11 @@ const KIND_LABEL: Record<SemanticFamily, string> = {
 };
 
 function normalize(name: string): string {
-  return name.toLowerCase().replace(/[_-]+/g, " ").trim();
+  return name
+    .toLowerCase()
+    .replace(/^functions\./, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
 }
 
 export function semanticFamily(span: Span): SemanticFamily | null {
@@ -23,15 +27,45 @@ export function semanticFamily(span: Span): SemanticFamily | null {
   if (span.type === "agent" || span.type === "system" || span.type === "memory") return null;
   if (span.type === "llm") return "llm";
   const name = normalize(span.name);
-  if (/(web )?search|websearch|tavily|exa|brave|google|bing|duckduckgo|tool search|^grep\b/.test(name)) {
+  if (/\b(web ?search|websearch|tavily|exa|brave|google|bing|duckduckgo)\b/.test(name)) {
     return "search";
   }
-  if (/browser|navigate|click|extract|screenshot|playwright|puppeteer|computer use|webfetch|web fetch/.test(name)) {
+  if (
+    /browser|navigate|click|extract|screenshot|playwright|puppeteer|computer use|webfetch|web fetch/.test(
+      name
+    )
+  ) {
     return "browser";
   }
-  if (/^(read|read file|readfile|glob)\b/.test(name) || name === "cat") return "read";
-  if (/write|edit|apply patch|applypatch|strreplace|search replace/.test(name)) return "write";
-  if (/shell|bash|zsh|powershell|exec|command|terminal/.test(name)) return "shell";
+  if (
+    /\b(grep|glob|ripgrep|codebase search|grep search|glob file|list dir|read file|readfile|^read\b)\b/.test(
+      name
+    ) ||
+    name === "cat" ||
+    name === "ls" ||
+    name === "rg"
+  ) {
+    return "read";
+  }
+  if (/\b(write|edit|apply ?patch|strreplace|search replace|delete file|edit file)\b/.test(name)) {
+    return "write";
+  }
+  if (
+    /\b(shell command|exec command|run terminal|powershell|zsh|bash|shell|terminal)\b/.test(name) ||
+    name === "exec" ||
+    name === "command"
+  ) {
+    return "shell";
+  }
+  const input =
+    span.input && typeof span.input === "object" && !Array.isArray(span.input)
+      ? (span.input as Record<string, unknown>)
+      : null;
+  if (input) {
+    const kind = typeof input.type === "string" ? input.type.toLowerCase() : "";
+    if (kind === "search" || typeof input.query === "string") return "search";
+    if (kind === "open_page" || kind === "find" || typeof input.url === "string") return "browser";
+  }
   if (span.type === "tool" || span.type === "retrieval") return null;
   return null;
 }
@@ -40,6 +74,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+export function isSemanticSpan(span: Span): boolean {
+  return asRecord(span.output)?.semantic === true;
 }
 
 export function evidenceFamily(span: Span): SemanticFamily | null {
@@ -147,7 +185,7 @@ function firstTitle(value: unknown): string | undefined {
 }
 
 function isGenericName(name: string): boolean {
-  return /^(web ?search|websearch|web fetch|webfetch|read( file)?|write|edit|bash|shell|zsh|grep|glob|navigate|click|screenshot|browse(r)?|tool|function call|llm response|assistant|cat|ls|exec|command|apply patch|search ×\d+|browser ×\d+|read ×\d+|edit ×\d+|shell ×\d+|llm ×\d+)$/i.test(
+  return /^(web ?search|websearch|web fetch|webfetch|read( file)?|write|edit|bash|shell( command)?|zsh|grep|glob|navigate|click|screenshot|browse(r)?|tool|function call|llm response|assistant|cat|ls|exec( command)?|command|apply patch|run terminal( cmd)?|search ×\d+|browser ×\d+|read ×\d+|edit ×\d+|shell ×\d+|llm ×\d+|file|page|search|\[object object\])$/i.test(
     normalize(name)
   );
 }
@@ -280,59 +318,98 @@ function mergeGroup(items: Span[], family: SemanticFamily | null): Span {
   };
 }
 
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function artifactTarget(span: Span, family: SemanticFamily): string | undefined {
+  const stored = str(asRecord(span.output)?.obtained);
+  const { input, output } = ioOf(span);
+
+  if (family === "read" || family === "write") {
+    const path =
+      pick(input, ["file_path", "path", "file", "target_file"]) ||
+      pick(output, ["file_path", "path", "file"]);
+    if (path) return `path:${normalizePath(path)}`;
+  }
+  if (family === "browser") {
+    const url = pick(input, ["url"]) || pick(output, ["url"]);
+    if (url) {
+      try {
+        const parsed = new URL(url);
+        return `url:${parsed.hostname}${parsed.pathname.replace(/\/$/, "")}`.toLowerCase();
+      } catch {
+        return `url:${url.toLowerCase()}`;
+      }
+    }
+  }
+  if (family === "search") {
+    const query = pick(input, ["query", "q", "pattern", "search_term"]) || pick(output, ["query"]);
+    if (query) return `q:${query.toLowerCase().replace(/\s+/g, " ").slice(0, 80)}`;
+  }
+  if (family === "shell") {
+    const command =
+      pick(input, ["command", "cmd", "input", "value"]) ||
+      (Array.isArray(input?.command)
+        ? input.command.filter((part): part is string => typeof part === "string").join(" ")
+        : undefined);
+    if (command) {
+      const tokens = command.trim().split(/\s+/).slice(0, 2).join(" ").toLowerCase();
+      return tokens ? `sh:${tokens}` : undefined;
+    }
+  }
+  if (stored && !isGenericName(stored)) return `got:${stored.toLowerCase()}`;
+  return undefined;
+}
+
+function collapseKey(span: Span): string {
+  if (isUserTurn(span) || isContextSpan(span)) return `id:${span.id}`;
+  if (span.type === "agent" || span.type === "system" || span.type === "memory") return `id:${span.id}`;
+  const family = semanticFamily(span);
+  if (!family) return `id:${span.id}`;
+  if (family === "llm") return `llm:${span.parentId ?? "root"}`;
+  const target = artifactTarget(span, family);
+  if (!target) return `id:${span.id}`;
+  return `${family}:${target}`;
+}
+
 export function collapseSemanticSpans(spans: Span[]): Span[] {
   if (spans.length <= 1) return spans;
+  if (spans.some(isSemanticSpan)) return spans;
 
   const byId = new Map(spans.map((span) => [span.id, span]));
-
-  function nearestAnchor(span: Span): string {
-    let current = span.parentId;
-    const seen = new Set<string>();
-    while (current && !seen.has(current)) {
-      seen.add(current);
-      const parent = byId.get(current);
-      if (!parent) break;
-      if (!semanticFamily(parent)) return parent.id;
-      current = parent.parentId;
-    }
-    return span.parentId ?? "root";
-  }
-
-  const sorted = [...spans].sort(
-    (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
-  );
-
-  const groups = new Map<string, Span[]>();
-  const order: string[] = [];
+  const sorted = byTime(spans);
+  const groups: Span[][] = [];
 
   for (const span of sorted) {
-    const family = semanticFamily(span);
-    const key = family ? `${nearestAnchor(span)}:${family}` : `unique:${span.id}`;
-    if (!groups.has(key)) {
-      groups.set(key, []);
-      order.push(key);
+    const key = collapseKey(span);
+    const previous = groups.at(-1);
+    const previousKey = previous ? collapseKey(previous[0]) : null;
+    if (previous && previousKey === key && !key.startsWith("id:")) {
+      previous.push(span);
+    } else {
+      groups.push([span]);
     }
-    groups.get(key)!.push(span);
   }
 
   const idMap = new Map<string, string>();
   const merged: Span[] = [];
 
-  for (const key of order) {
-    const items = groups.get(key)!;
+  for (const items of groups) {
     const family = semanticFamily(items[0]);
     const node = mergeGroup(items, family);
     merged.push(node);
     for (const item of items) idMap.set(item.id, node.id);
   }
 
+  const ids = new Set(merged.map((span) => span.id));
   return merged.map((span) => {
     if (!span.parentId) return span;
-    const mapped = idMap.get(span.parentId) ?? span.parentId;
-    if (mapped === span.id) {
-      const original = byId.get(span.id);
-      const anchor = original ? nearestAnchor(original) : "root";
-      return { ...span, parentId: anchor === span.id ? null : idMap.get(anchor) ?? anchor };
+    let mapped: string | null = idMap.get(span.parentId) ?? span.parentId;
+    if (mapped === span.id) mapped = byId.get(span.id)?.parentId ?? null;
+    if (mapped) mapped = idMap.get(mapped) ?? mapped;
+    if (!mapped || mapped === span.id || !ids.has(mapped)) {
+      return { ...span, parentId: null };
     }
     return { ...span, parentId: mapped };
   });
@@ -347,6 +424,10 @@ export function inferRunStatus(spans: Span[]): Trace["status"] {
 
 export function isUserTurn(span: Span): boolean {
   return span.name === "User Message" || /^user(\s+message)?$/i.test(span.name);
+}
+
+export function isContextSpan(span: Span): boolean {
+  return span.name === "Context";
 }
 
 function byTime(spans: Span[]): Span[] {
@@ -373,85 +454,49 @@ export function rehomeInjectedContext(spans: Span[]): Span[] {
   if (spans.length === 0) return spans;
 
   const ordered = byTime(spans).map((span) => {
-    if (span.name === "Context") return { ...span, type: "memory" as const };
-    if (isUserTurn(span) && isInjectedContext(spanMessage(span))) {
+    if (isContextSpan(span) || (isUserTurn(span) && isInjectedContext(spanMessage(span)))) {
       return { ...span, name: "Context", type: "memory" as const };
     }
     return span;
   });
 
+  const contextIds = new Set(ordered.filter(isContextSpan).map((span) => span.id));
+  if (contextIds.size === 0) return ordered;
+
   const realUsers = ordered.filter(isUserTurn);
-  const contextIds = new Set(
-    ordered.filter((span) => span.name === "Context").map((span) => span.id)
-  );
-
-  const ownerOf = new Map<string, string | null>();
-  for (let index = 0; index < ordered.length; index += 1) {
-    const span = ordered[index];
-    if (span.name !== "Context") continue;
-    const nextUser = ordered.slice(index + 1).find(isUserTurn);
-    const previousUser = [...realUsers].reverse().find((user) => {
-      return new Date(user.startedAt).getTime() <= new Date(span.startedAt).getTime();
-    });
-    ownerOf.set(span.id, nextUser?.id ?? previousUser?.id ?? null);
-  }
-
   const parentOf = new Map(ordered.map((span) => [span.id, span.parentId] as const));
+
   for (const span of ordered) {
-    if (span.name === "Context") {
-      parentOf.set(span.id, ownerOf.get(span.id) ?? null);
+    if (isContextSpan(span)) {
+      parentOf.set(span.id, null);
       continue;
     }
     const parent = parentOf.get(span.id);
-    if (parent && contextIds.has(parent)) {
-      parentOf.set(span.id, isUserTurn(span) ? null : ownerOf.get(parent) ?? null);
-    }
-  }
-
-  const collapsed: Span[] = [];
-  const dropped = new Set<string>();
-  let pending: Span[] = [];
-
-  const flush = () => {
-    if (pending.length === 0) return;
-    const first = pending[0];
-    const owner = parentOf.get(first.id) ?? null;
-    const messages = pending.map(spanMessage).filter(Boolean);
-    collapsed.push(
-      asContextSpan(
-        first,
-        owner,
-        messages.length <= 1
-          ? first.input
-          : { items: messages }
-      )
+    if (!parent || !contextIds.has(parent)) continue;
+    const nextUser = realUsers.find(
+      (user) => new Date(user.startedAt).getTime() >= new Date(span.startedAt).getTime()
     );
-    for (const extra of pending.slice(1)) dropped.add(extra.id);
-    pending = [];
-  };
-
-  for (const span of ordered) {
-    if (span.name === "Context") {
-      const owner = parentOf.get(span.id) ?? null;
-      const currentOwner = pending[0] ? parentOf.get(pending[0].id) ?? null : null;
-      if (pending.length > 0 && currentOwner !== owner) flush();
-      pending.push(span);
-      continue;
-    }
-    flush();
-    collapsed.push({
-      ...span,
-      parentId: parentOf.has(span.id) ? parentOf.get(span.id) ?? null : span.parentId,
-    });
+    const previousUser = [...realUsers].reverse().find(
+      (user) => new Date(user.startedAt).getTime() <= new Date(span.startedAt).getTime()
+    );
+    parentOf.set(span.id, isUserTurn(span) ? null : nextUser?.id ?? previousUser?.id ?? null);
   }
-  flush();
 
-  return collapsed.map((span) => {
-    let parent = span.parentId;
-    if (parent && dropped.has(parent)) {
-      parent = parentOf.get(parent) ?? null;
-    }
-    if (parent === span.id || (parent && dropped.has(parent))) parent = null;
+  const contextSpans = ordered.filter(isContextSpan);
+  const flow = ordered.filter((span) => !isContextSpan(span));
+  const first = contextSpans[0];
+  const messages = contextSpans.map(spanMessage).filter(Boolean);
+  const merged = asContextSpan(
+    first,
+    null,
+    messages.length <= 1 ? first.input : { items: messages }
+  );
+  const dropped = new Set(contextSpans.slice(1).map((span) => span.id));
+
+  return [merged, ...flow].map((span) => {
+    let parent = isContextSpan(span) ? null : parentOf.get(span.id) ?? span.parentId;
+    if (parent && dropped.has(parent)) parent = null;
+    if (parent === span.id) parent = null;
     return { ...span, parentId: parent };
   });
 }
@@ -473,24 +518,39 @@ export function linkConversationTurns(spans: Span[]): Span[] {
   if (userIndexes.length <= 1) return spans;
 
   const parentOf = new Map(spans.map((span) => [span.id, span.parentId] as const));
+  const byId = new Map(spans.map((span) => [span.id, span] as const));
 
   for (let turn = 0; turn < userIndexes.length; turn += 1) {
     const start = userIndexes[turn];
     const end = userIndexes[turn + 1] ?? ordered.length;
     const user = ordered[start];
-    const turnIds = new Set(ordered.slice(start, end).map((span) => span.id));
+    const turnIds = new Set(
+      ordered.slice(start, end).filter((span) => !isContextSpan(span)).map((span) => span.id)
+    );
 
     if (turn === 0) {
       parentOf.set(user.id, null);
     } else {
-      const previous = ordered.slice(userIndexes[turn - 1], start);
+      const previous = ordered
+        .slice(userIndexes[turn - 1], start)
+        .filter((span) => !isContextSpan(span));
       parentOf.set(user.id, previous[previous.length - 1]?.id ?? null);
     }
 
     for (let index = start + 1; index < end; index += 1) {
       const span = ordered[index];
+      if (isContextSpan(span)) {
+        parentOf.set(span.id, null);
+        continue;
+      }
       const current = parentOf.get(span.id);
-      if (!current || current === span.id || !turnIds.has(current)) {
+      const currentSpan = current ? byId.get(current) : undefined;
+      if (
+        !current ||
+        current === span.id ||
+        !turnIds.has(current) ||
+        (currentSpan && isContextSpan(currentSpan))
+      ) {
         parentOf.set(span.id, user.id);
       }
     }
@@ -503,13 +563,153 @@ export function linkConversationTurns(spans: Span[]): Span[] {
 }
 
 export function prepareSpans(spans: Span[]): Span[] {
-  return linkConversationTurns(
-    rehomeInjectedContext(collapseSemanticSpans(softenToolErrors(spans)))
-  );
+  return linkConversationTurns(rehomeInjectedContext(softenToolErrors(spans)));
+}
+
+export function spanSourceHash(spans: Span[]): string {
+  let hash = 5381;
+  const payload = spans.map((span) => `${span.id}\0${span.name}\0${span.type}`).join("\n");
+  for (let index = 0; index < payload.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ payload.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+export function semanticGraphMatches(trace: Trace): boolean {
+  const graph = trace.semanticGraph;
+  if (!graph?.spans?.length || graph.version !== 1) return false;
+  const current = spanSourceHash(trace.spans);
+  return graph.sourceHash === current || spanSourceHash(graph.spans) === current;
+}
+
+export type SemanticNodePlan = {
+  id?: string;
+  name: string;
+  family?: SemanticFamily | null;
+  parentId: string | null;
+  spanIds: string[];
+  status?: Span["status"];
+};
+
+function markSemantic(span: Span, obtained: string, family: SemanticFamily | null): Span {
+  const output = asRecord(span.output) ?? (span.output === undefined ? {} : { last: span.output });
+  return {
+    ...span,
+    name: obtained,
+    output: {
+      ...output,
+      ...(family ? { family } : {}),
+      obtained,
+      semantic: true,
+    },
+  };
+}
+
+export function applySemanticPlan(spans: Span[], nodes: SemanticNodePlan[]): Span[] | null {
+  if (nodes.length === 0) return null;
+
+  const byId = new Map(spans.map((span) => [span.id, span]));
+  const used = new Set<string>();
+  const idMap = new Map<string, string>();
+  const merged: Span[] = [];
+  const takenIds = new Set<string>();
+
+  for (const node of nodes) {
+    const items = [...new Set(node.spanIds)]
+      .map((id) => byId.get(id))
+      .filter((span): span is Span => Boolean(span))
+      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+    if (items.length === 0) continue;
+
+    const family = node.family ?? semanticFamily(items[0]);
+    const preferred = node.id && byId.has(node.id) && !takenIds.has(node.id) ? node.id : items[0].id;
+    const obtained = clip(node.name);
+    const group = markSemantic(mergeGroup(items, family), obtained, family);
+    const next: Span = {
+      ...group,
+      id: preferred,
+      parentId: node.parentId,
+      status: node.status ?? group.status,
+    };
+    merged.push(next);
+    takenIds.add(next.id);
+    for (const item of items) {
+      used.add(item.id);
+      idMap.set(item.id, next.id);
+    }
+    idMap.set(next.id, next.id);
+  }
+
+  for (const span of spans) {
+    if (used.has(span.id)) continue;
+    const extra = collapseSemanticSpans([span])[0] ?? span;
+    merged.push(extra);
+    idMap.set(span.id, extra.id);
+  }
+
+  if (merged.length === 0) return null;
+
+  const ids = new Set(merged.map((span) => span.id));
+  const remapped = merged.map((span) => {
+    if (isContextSpan(span)) return { ...span, parentId: null };
+    let parent = span.parentId ? (idMap.get(span.parentId) ?? span.parentId) : null;
+    if (parent === span.id || (parent && !ids.has(parent))) parent = null;
+    return { ...span, parentId: parent };
+  });
+
+  const byMerged = new Map(remapped.map((span) => [span.id, span]));
+  return remapped
+    .map((span) => {
+      const seen = new Set<string>();
+      let current = span.parentId;
+      while (current) {
+        if (current === span.id || seen.has(current)) {
+          return { ...span, parentId: null };
+        }
+        seen.add(current);
+        current = byMerged.get(current)?.parentId ?? null;
+      }
+      return span;
+    })
+    .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+}
+
+export function compactSpanForModel(span: Span): Record<string, unknown> {
+  const family = semanticFamily(span);
+  const hint = labelOne(span, family);
+  const { input, output } = ioOf(span);
+  const clipText = (value: unknown, max = 220) => {
+    if (value === undefined || value === null) return undefined;
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    const compact = text.replace(/\s+/g, " ").trim();
+    return compact.length > max ? `${compact.slice(0, max)}…` : compact;
+  };
+  return {
+    id: span.id,
+    name: span.name,
+    type: span.type,
+    status: span.status,
+    parentId: span.parentId,
+    family,
+    obtainedHint: hint,
+    input: clipText(input ?? span.input),
+    output: clipText(output ?? span.output),
+    calls: evidenceCalls(span)
+      .map((call) => call.name)
+      .slice(0, 16),
+    error: span.error ? clipText(span.error, 160) : undefined,
+  };
+}
+
+export function displaySpans(trace: Trace): Span[] {
+  if (semanticGraphMatches(trace)) {
+    return trace.semanticGraph!.spans;
+  }
+  return collapseSemanticSpans(prepareSpans(trace.spans));
 }
 
 export function presentTrace(trace: Trace): Trace {
-  const spans = prepareSpans(trace.spans);
+  const spans = displaySpans(trace);
   return {
     ...trace,
     name: pickRunTitle({ ...trace, spans }),

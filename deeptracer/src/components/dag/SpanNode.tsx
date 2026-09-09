@@ -3,7 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Span } from "@/types/trace";
 import { SpanNodeData } from "@/lib/dag-layout";
-import { spanKindLabel } from "@/lib/semantic-spans";
+import { isContextSpan, spanKindLabel } from "@/lib/semantic-spans";
 
 function formatDuration(ms?: number): string {
   if (!ms) return "—";
@@ -32,14 +32,17 @@ export default function SpanNode({ data, selected }: NodeProps<Node<SpanNodeData
   const { span, isStart } = data;
   const mark = statusMark(span.status);
   const failed = span.status === "error";
+  const detached = isContextSpan(span);
 
   return (
     <div className="group relative">
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="!h-1.5 !w-1.5 !border-0 !bg-zinc-500"
-      />
+      {detached ? null : (
+        <Handle
+          type="target"
+          position={Position.Top}
+          className="!h-1.5 !w-1.5 !border-0 !bg-zinc-500"
+        />
+      )}
       <div
         className={`w-[188px] rounded-md border bg-[#141416] px-2.5 py-2 shadow-none transition-[border-color,box-shadow] ${
           selected
@@ -79,11 +82,13 @@ export default function SpanNode({ data, selected }: NodeProps<Node<SpanNodeData
           <span className="text-zinc-300">{formatDuration(span.duration)}</span>
         </div>
       </div>
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="!h-1.5 !w-1.5 !border-0 !bg-zinc-500"
-      />
+      {detached ? null : (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className="!h-1.5 !w-1.5 !border-0 !bg-zinc-500"
+        />
+      )}
     </div>
   );
 }

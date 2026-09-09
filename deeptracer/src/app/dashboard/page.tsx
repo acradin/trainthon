@@ -12,15 +12,22 @@ import {
   OTHER_PROJECT,
   projectKey,
   sourceLabel,
-  type TraceSource,
 } from "@/lib/trace-source";
 import FilterSelect from "@/components/FilterSelect";
 import { DESKTOP_AGENT_IDS, isDesktopAgentId, type AgentId } from "@/lib/agents/types";
+import {
+  peekRunsFilters,
+  restoreRunsFilters,
+  writeRunsFilters,
+  type RunsAgentKey,
+  type RunsRangeKey,
+  type RunsSortKey,
+} from "@/lib/runs-filters";
 
-type RangeKey = "today" | "7d" | "all";
-type AgentKey = "all" | TraceSource;
+type RangeKey = RunsRangeKey;
+type AgentKey = RunsAgentKey;
 type ProjectFilter = "all" | string;
-type SortKey = "newest" | "oldest" | "duration" | "intent" | "name";
+type SortKey = RunsSortKey;
 
 const RANGE_OPTIONS: Array<{ id: RangeKey; label: string }> = [
   { id: "today", label: "Today" },
@@ -86,14 +93,30 @@ export default function DashboardPage() {
   const router = useRouter();
   const [traces, setTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState<RangeKey>("today");
-  const [agent, setAgent] = useState<AgentKey>("all");
-  const [project, setProject] = useState<ProjectFilter>("all");
-  const [sort, setSort] = useState<SortKey>("newest");
-  const [query, setQuery] = useState("");
+  const [range, setRange] = useState<RangeKey>(() => peekRunsFilters().range);
+  const [agent, setAgent] = useState<AgentKey>(() => peekRunsFilters().agent);
+  const [project, setProject] = useState<ProjectFilter>(() => peekRunsFilters().project);
+  const [sort, setSort] = useState<SortKey>(() => peekRunsFilters().sort);
+  const [query, setQuery] = useState(() => peekRunsFilters().query);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [installedSources, setInstalledSources] = useState<AgentId[]>([]);
+
+  useEffect(() => {
+    const stored = restoreRunsFilters();
+    setRange(stored.range);
+    setAgent(stored.agent);
+    setProject(stored.project);
+    setSort(stored.sort);
+    setQuery(stored.query);
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    writeRunsFilters({ range, agent, project, sort, query });
+  }, [filtersReady, range, agent, project, sort, query]);
 
   useEffect(() => {
     void bootstrap();

@@ -1,7 +1,7 @@
 import { Graph, layout } from "@dagrejs/dagre";
 import { Edge, MarkerType, Node, Position } from "@xyflow/react";
 import { Span } from "@/types/trace";
-import { isUserTurn } from "@/lib/semantic-spans";
+import { isContextSpan, isUserTurn } from "@/lib/semantic-spans";
 
 export const SPAN_NODE_WIDTH = 188;
 export const SPAN_NODE_HEIGHT = 70;
@@ -41,21 +41,25 @@ export function layoutSpans(spans: Span[]): {
     marginy: 24,
   });
 
-  const ids = new Set(spans.map((span) => span.id));
+  const flowSpans = spans.filter((span) => !isContextSpan(span));
+  const contextSpans = spans.filter(isContextSpan);
+  const layoutTargets = flowSpans.length > 0 ? flowSpans : spans;
 
-  spans.forEach((span) => {
+  layoutTargets.forEach((span) => {
     graph.setNode(span.id, { width: SPAN_NODE_WIDTH, height: SPAN_NODE_HEIGHT });
   });
 
+  const ids = new Set(layoutTargets.map((span) => span.id));
+
   const edgePairs: Array<{ source: string; target: string }> = [];
-  spans.forEach((span) => {
-    if (span.parentId && ids.has(span.parentId)) {
+  layoutTargets.forEach((span) => {
+    if (span.parentId && ids.has(span.parentId) && !isContextSpan(span)) {
       graph.setEdge(span.parentId, span.id);
       edgePairs.push({ source: span.parentId, target: span.id });
     }
   });
 
-  const ordered = conversationOrder(spans);
+  const ordered = conversationOrder(layoutTargets);
   const userIndexes = ordered
     .map((span, index) => (isUserTurn(span) ? index : -1))
     .filter((index) => index >= 0);
@@ -64,7 +68,7 @@ export function layoutSpans(spans: Span[]): {
     const nextUser = ordered[userIndexes[turn + 1]];
     const turnSpans = ordered.slice(userIndexes[turn], userIndexes[turn + 1]);
     for (const span of turnSpans) {
-      if (span.id === nextUser.id || nextUser.parentId === span.id) continue;
+      if (isContextSpan(span) || span.id === nextUser.id || nextUser.parentId === span.id) continue;
       if (!graph.hasEdge(span.id, nextUser.id)) {
         graph.setEdge(span.id, nextUser.id);
       }
@@ -73,13 +77,13 @@ export function layoutSpans(spans: Span[]): {
 
   layout(graph);
 
-  const roots = spans.filter((span) => !span.parentId || !ids.has(span.parentId));
+  const roots = layoutTargets.filter((span) => !span.parentId || !ids.has(span.parentId));
   const startId =
     roots.find((span) => isUserTurn(span))?.id ??
     roots[0]?.id ??
-    spans[0]?.id;
+    layoutTargets[0]?.id;
 
-  const nodes: SpanFlowNode[] = spans.map((span) => {
+  const nodes: SpanFlowNode[] = layoutTargets.map((span) => {
     const positioned = graph.node(span.id);
     return {
       id: span.id,
@@ -93,6 +97,25 @@ export function layoutSpans(spans: Span[]): {
       targetPosition: Position.Top,
     };
   });
+
+  if (flowSpans.length > 0 && contextSpans.length > 0) {
+    const startNode = nodes.find((node) => node.id === startId) ?? nodes[0];
+    const originX = startNode?.position.x ?? 0;
+    const originY = startNode?.position.y ?? 0;
+    contextSpans.forEach((span, index) => {
+      nodes.push({
+        id: span.id,
+        type: "span",
+        position: {
+          x: originX - SPAN_NODE_WIDTH - 72,
+          y: originY + index * (SPAN_NODE_HEIGHT + 24),
+        },
+        data: { span, isStart: false },
+        sourcePosition: Position.Bottom,
+        targetPosition: Position.Top,
+      });
+    });
+  }
 
   const edges: Edge[] = edgePairs.map(({ source, target }) => ({
     id: `${source}-${target}`,

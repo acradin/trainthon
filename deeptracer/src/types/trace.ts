@@ -17,6 +17,14 @@ export interface Span {
   error?: string;
 }
 
+export interface SemanticGraph {
+  version: 1;
+  model: string;
+  builtAt: string;
+  sourceHash: string;
+  spans: Span[];
+}
+
 export interface Trace {
   traceId: string;
   name: string;
@@ -27,6 +35,7 @@ export interface Trace {
   finishedAt?: string;
   duration?: number;
   spans: Span[];
+  semanticGraph?: SemanticGraph;
 }
 
 export interface Evidence {

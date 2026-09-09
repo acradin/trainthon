@@ -1,16 +1,16 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { RootCauseAnalysis, Span, Trace } from "@/types/trace";
 import { MOCK_TRACES } from "@/data/mock-traces";
+import BrandLockup from "@/components/BrandLockup";
 import ExecutionGraph from "@/components/ExecutionGraph";
 import Inspector from "@/components/dag/Inspector";
 import Timeline from "@/components/dag/Timeline";
 import TestGenerator from "@/components/TestGenerator";
 import SourceLogo, { sourceShortLabel } from "@/components/SourceLogo";
-import { presentTrace } from "@/lib/semantic-spans";
+import { presentTrace, semanticGraphMatches } from "@/lib/semantic-spans";
 import { inferProject, inferTraceSource } from "@/lib/trace-source";
 
 interface PageProps {
@@ -38,6 +38,7 @@ export default function TraceDetailPage({ params }: PageProps) {
   const { traceId } = use(params);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [loading, setLoading] = useState(true);
+  const [graphStatus, setGraphStatus] = useState<"ready" | "building">("ready");
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RootCauseAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -49,24 +50,60 @@ export default function TraceDetailPage({ params }: PageProps) {
       setLoading(true);
       setSelectedSpanId(null);
       setView("graph");
+      const apply = (raw: Trace | null) => {
+        if (!raw) {
+          setTrace(null);
+          setGraphStatus("ready");
+          return;
+        }
+        setTrace(presentTrace(raw));
+        setGraphStatus(semanticGraphMatches(raw) && raw.semanticGraph?.model !== "heuristic" ? "ready" : "building");
+      };
       try {
         const response = await fetch(`/api/traces/${traceId}`);
         const data = await response.json();
         if (data.success && data.trace) {
-          setTrace(presentTrace(data.trace));
+          apply(data.trace as Trace);
         } else {
           const fallback = Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null;
-          setTrace(fallback ? presentTrace(fallback) : null);
+          apply(fallback);
         }
       } catch {
         const fallback = Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null;
-        setTrace(fallback ? presentTrace(fallback) : null);
+        apply(fallback);
       } finally {
         setLoading(false);
       }
     };
     void load();
   }, [traceId]);
+
+  useEffect(() => {
+    if (!trace || graphStatus !== "building") return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const response = await fetch(`/api/traces/${trace.traceId}/semantic`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const data = await response.json();
+        if (cancelled) return;
+        if (data.success && data.trace) {
+          setTrace(presentTrace(data.trace as Trace));
+        }
+      } catch (error) {
+        console.error("Semantic graph failed:", error);
+      } finally {
+        if (!cancelled) setGraphStatus("ready");
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [trace?.traceId, graphStatus]);
 
   const selectedSpan: Span | null = useMemo(() => {
     if (!trace || !selectedSpanId) return null;
@@ -129,16 +166,7 @@ export default function TraceDetailPage({ params }: PageProps) {
     <div className="flex h-screen flex-col bg-[#0b0b0c] text-zinc-100">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/" className="flex items-center" aria-label="deeptracer">
-            <Image
-              src="/logo-dark.png"
-              alt="deeptracer"
-              width={154}
-              height={40}
-              className="h-6 w-auto"
-              priority
-            />
-          </Link>
+          <BrandLockup compact />
           <span className="text-zinc-800">/</span>
           <Link href="/dashboard" className="text-[13px] text-zinc-500 hover:text-zinc-200">
             Runs
@@ -220,11 +248,18 @@ export default function TraceDetailPage({ params }: PageProps) {
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
           {view === "graph" ? (
-            <ExecutionGraph
-              spans={trace.spans}
-              selectedSpanId={selectedSpanId}
-              onSelectSpan={setSelectedSpanId}
-            />
+            graphStatus === "building" ? (
+              <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+                <p className="text-[13px] text-zinc-300">Building meaning graph</p>
+                <p className="text-[12px] text-zinc-500">Collapsing tool calls into what each step obtained</p>
+              </div>
+            ) : (
+              <ExecutionGraph
+                spans={trace.spans}
+                selectedSpanId={selectedSpanId}
+                onSelectSpan={setSelectedSpanId}
+              />
+            )
           ) : (
             <div className="h-full overflow-y-auto p-4">
               <button
@@ -237,12 +272,12 @@ export default function TraceDetailPage({ params }: PageProps) {
             </div>
           )}
         </div>
-        {view === "graph" && selectedSpan && (
+        {view === "graph" && graphStatus === "ready" && selectedSpan && (
           <Inspector span={selectedSpan} onClose={() => setSelectedSpanId(null)} />
         )}
       </div>
 
-      {view === "graph" && (
+      {view === "graph" && graphStatus === "ready" && (
         <Timeline
           spans={trace.spans}
           selectedSpanId={selectedSpanId}
