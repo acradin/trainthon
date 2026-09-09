@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useMemo, useEffect, use } from "react";
 import Link from "next/link";
 import { Trace, Span, RootCauseAnalysis } from "@/types/trace";
 import { MOCK_TRACES } from "@/data/mock-traces";
@@ -27,14 +27,51 @@ function formatDateTime(dateString: string): string {
 
 export default function TraceDetailPage({ params }: PageProps) {
   const { traceId } = use(params);
+  const [trace, setTrace] = useState<Trace | null>(null);
+  const [allTraces, setAllTraces] = useState<Trace[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RootCauseAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
 
-  const trace: Trace | undefined = useMemo(() => {
-    return Object.values(MOCK_TRACES).find((t) => t.traceId === traceId);
+  useEffect(() => {
+    fetchTrace();
+    fetchAllTraces();
   }, [traceId]);
+
+  const fetchTrace = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/traces/${traceId}`);
+      const data = await response.json();
+      if (data.success && data.trace) {
+        setTrace(data.trace);
+      } else {
+        const mockTrace = Object.values(MOCK_TRACES).find((t) => t.traceId === traceId);
+        setTrace(mockTrace || null);
+      }
+    } catch {
+      const mockTrace = Object.values(MOCK_TRACES).find((t) => t.traceId === traceId);
+      setTrace(mockTrace || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllTraces = async () => {
+    try {
+      const response = await fetch("/api/traces");
+      const data = await response.json();
+      if (data.success && data.traces) {
+        setAllTraces(data.traces);
+      } else {
+        setAllTraces(Object.values(MOCK_TRACES));
+      }
+    } catch {
+      setAllTraces(Object.values(MOCK_TRACES));
+    }
+  };
 
   const selectedSpan: Span | null = useMemo(() => {
     if (!trace || !selectedSpanId) return null;
@@ -61,6 +98,17 @@ export default function TraceDetailPage({ params }: PageProps) {
       setAnalyzing(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-pulse">🔍</div>
+          <p className="text-slate-400">Loading trace...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!trace) {
     return (
@@ -125,7 +173,7 @@ export default function TraceDetailPage({ params }: PageProps) {
         <aside className="w-48 bg-slate-900/50 border-r border-slate-800 overflow-y-auto shrink-0">
           <div className="p-3 border-b border-slate-800"><h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Traces</h3></div>
           <div className="divide-y divide-slate-800">
-            {Object.values(MOCK_TRACES).map((t) => (
+            {allTraces.map((t) => (
               <Link key={t.traceId} href={`/trace/${t.traceId}`} className={`block p-3 hover:bg-slate-800/50 transition-colors ${t.traceId === traceId ? "bg-slate-800/50 border-l-2 border-orange-500" : ""}`}>
                 <div className="flex items-center gap-2">
                   <span className={`text-sm ${t.status === "failed" ? "text-red-400" : "text-green-400"}`}>{t.status === "failed" ? "✗" : "✓"}</span>
