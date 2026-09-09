@@ -106,6 +106,8 @@ export function importClaudeCodeTrace(otelJson: OtelTrace): Trace | null {
     const rootSpan = allSpans.find((s) => !s.parentSpanId) || allSpans[0];
     const traceId = rootSpan.traceId;
     
+    const finalTraceId = `cc_${traceId.slice(0, 8)}`;
+    
     const spans: Span[] = allSpans.map((otelSpan) => {
       const attrs = otelSpan.attributes;
       const error = otelSpan.status?.message || getAttributeValue(attrs, "error.message");
@@ -143,7 +145,7 @@ export function importClaudeCodeTrace(otelJson: OtelTrace): Trace | null {
       
       return {
         id: otelSpan.spanId,
-        traceId: traceId,
+        traceId: finalTraceId,
         parentId: otelSpan.parentSpanId || null,
         name: otelSpan.name.replace("claude_code.", "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         type: mapSpanType(otelSpan.name, attrs),
@@ -163,7 +165,7 @@ export function importClaudeCodeTrace(otelJson: OtelTrace): Trace | null {
     const endTime = Math.max(...spans.filter((s) => s.finishedAt).map((s) => new Date(s.finishedAt!).getTime()));
     
     return {
-      traceId: `cc_${traceId.slice(0, 8)}`,
+      traceId: finalTraceId,
       name: `${serviceName} Session`,
       status: hasError ? "failed" : "success",
       startedAt: new Date(startTime).toISOString(),

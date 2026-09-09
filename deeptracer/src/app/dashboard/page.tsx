@@ -98,6 +98,7 @@ export default function DashboardPage() {
                   {seeding ? "Loading..." : "📥 Load Sample Data"}
                 </button>
               )}
+              <Link href="/setup" className="px-4 py-2 bg-green-700 hover:bg-green-600 rounded-lg text-sm transition-colors">⚙️ Setup</Link>
               <Link href="/import" className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-lg text-sm transition-colors">📥 Import</Link>
               <Link href="/" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors">Quick Analyze</Link>
             </div>

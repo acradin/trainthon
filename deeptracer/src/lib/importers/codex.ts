@@ -74,7 +74,8 @@ export function importCodexTrace(bundle: CodexBundle): Trace | null {
   try {
     const { manifest, events, state } = bundle;
     const spans: Span[] = [];
-    const traceId = `codex_${manifest.rollout_id.slice(0, 8)}`;
+    const rolloutId = manifest.rollout_id || manifest.trace_id || "unknown";
+    const traceId = `codex_${rolloutId.slice(0, 8)}`;
     let spanCounter = 0;
     
     if (state?.inference_calls) {
