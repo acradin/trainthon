@@ -67,7 +67,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function tokens(value: string): string[] {
   return value
     .toLowerCase()
-    .split(/[^a-z0-9]+/i)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length > 1 && !STOP.has(token));
 }
 
@@ -78,7 +78,7 @@ function looksLikeRawJson(value: string): boolean {
 
 function wordMatch(hay: string, token: string): boolean {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, "i").test(hay);
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:[^\\p{L}\\p{N}]|$)`, "iu").test(hay);
 }
 
 function obtainedOf(span: Span): string {

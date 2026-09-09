@@ -15,6 +15,7 @@ import {
 } from "@/lib/trace-source";
 import FilterSelect from "@/components/FilterSelect";
 import { DESKTOP_AGENT_IDS, isDesktopAgentId, type AgentId } from "@/lib/agents/types";
+import { isConnectorSourceId, type TraceSource } from "@/lib/trace-source";
 import {
   peekRunsFilters,
   restoreRunsFilters,
@@ -101,7 +102,7 @@ export default function DashboardPage() {
   const [filtersReady, setFiltersReady] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [registered, setRegistered] = useState(false);
-  const [installedSources, setInstalledSources] = useState<AgentId[]>([]);
+  const [installedSources, setInstalledSources] = useState<TraceSource[]>([]);
 
   useEffect(() => {
     const stored = restoreRunsFilters();
@@ -126,7 +127,7 @@ export default function DashboardPage() {
     try {
       const registryRes = await fetch("/api/agents/discover");
       const registryData = await registryRes.json();
-      if (!registryData.registry?.agents?.length) {
+      if (!registryData.registry?.agents?.length && !registryData.connectors?.some((item: { connected?: boolean }) => item.connected)) {
         router.replace("/");
         return;
       }
@@ -136,7 +137,12 @@ export default function DashboardPage() {
           item.installed !== false && isDesktopAgentId(item.id)
         )
         .map((item) => item.id);
-      setInstalledSources(found);
+      const connected = ((registryData.connectors ?? []) as Array<{ id: string; connected?: boolean }>)
+        .filter((item): item is { id: TraceSource; connected?: boolean } =>
+          Boolean(item.connected && isConnectorSourceId(item.id))
+        )
+        .map((item) => item.id);
+      setInstalledSources([...found, ...connected]);
     } catch {
       router.replace("/");
       return;
@@ -212,16 +218,30 @@ export default function DashboardPage() {
   }, [project, projects]);
 
   const agentFilters = useMemo(() => {
-    const installed = DESKTOP_AGENT_IDS.filter((id) => installedSources.includes(id));
+    const ids = new Set<TraceSource>();
+    for (const id of installedSources) ids.add(id);
+    for (const trace of traces) {
+      const source = inferTraceSource(trace);
+      if (source !== "example") ids.add(source);
+    }
+    const installed = [...ids].filter(
+      (id) => DESKTOP_AGENT_IDS.includes(id as AgentId) || isConnectorSourceId(id)
+    );
     if (installed.length <= 1) return installed;
-    return ["all", ...installed] as Array<"all" | AgentId>;
-  }, [installedSources]);
+    return ["all", ...installed] as Array<"all" | TraceSource>;
+  }, [installedSources, traces]);
 
   useEffect(() => {
-    if (agent !== "all" && isDesktopAgentId(agent) && installedSources.length > 0 && !installedSources.includes(agent)) {
+    if (
+      agent !== "all" &&
+      agent !== "example" &&
+      installedSources.length > 0 &&
+      !installedSources.includes(agent) &&
+      !traces.some((trace) => inferTraceSource(trace) === agent)
+    ) {
       setAgent("all");
     }
-  }, [agent, installedSources]);
+  }, [agent, installedSources, traces]);
 
   const grouped = useMemo(() => {
     const buckets = new Map<string, Trace[]>();
@@ -253,7 +273,7 @@ export default function DashboardPage() {
     () =>
       agentFilters.map((key) =>
         key === "all"
-          ? { id: "all" as const, label: "All agents" }
+          ? { id: "all" as const, label: "All sources" }
           : {
               id: key,
               label: sourceShortLabel(key),
@@ -308,7 +328,7 @@ export default function DashboardPage() {
           />
           {agentOptions.length > 1 ? (
             <FilterSelect
-              label="Agent"
+              label="Source"
               value={agent === "example" ? "all" : agent}
               options={agentOptions}
               onChange={setAgent}

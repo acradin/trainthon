@@ -221,7 +221,9 @@ function labelOne(span: Span, family: SemanticFamily | null): string | undefined
     pick(input, ["query", "q", "pattern", "description", "url", "file_path", "path", "file", "command", "cmd", "selector", "input", "value", "message"]);
 
   if (family === "read" || family === "write") {
-    const path = pick(input, ["file_path", "path", "file"]) || pick(output, ["file_path", "path", "file"]);
+    const path =
+      pick(input, ["file_path", "path", "file", "target_file"]) ||
+      pick(output, ["file_path", "path", "file", "target_file"]);
     if (path) return fileName(path);
   }
   if (family === "browser") {
@@ -294,6 +296,7 @@ function mergeGroup(items: Span[], family: SemanticFamily | null): Span {
   const anyIssue = items.some((item) => item.status === "error" || item.status === "warning");
   const lastOutput = asRecord(last.output);
   const obtained = outcomeLabel(items, family);
+  const semantic = items.some(isSemanticSpan);
 
   return {
     ...first,
@@ -306,18 +309,36 @@ function mergeGroup(items: Span[], family: SemanticFamily | null): Span {
       ? {
           family,
           obtained,
-          attempts: items.length,
-          spanIds: items.map((item) => item.id),
+          attempts: items.reduce((total, item) => total + attemptCount(item), 0),
+          spanIds: flattenSpanIds(items),
           calls: items.map((item) => ({
             id: item.id,
-            name: item.name,
+            name: labelOne(item, family) || item.name,
             status: item.status,
             error: item.error,
           })),
           last: lastOutput?.last ?? last.output ?? null,
+          ...(semantic ? { semantic: true } : {}),
         }
       : last.output,
   };
+}
+
+function flattenSpanIds(items: Span[]): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const nested = asRecord(item.output)?.spanIds;
+    const group = Array.isArray(nested)
+      ? nested.filter((id): id is string => typeof id === "string")
+      : [];
+    for (const id of group.length > 0 ? group : [item.id]) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
 }
 
 function normalizePath(value: string): string {
@@ -405,6 +426,40 @@ export function collapseSemanticSpans(spans: Span[]): Span[] {
   }
 
   const ids = new Set(merged.map((span) => span.id));
+  return collapseParallelWaves(remapCollapsedParents(merged, byId, idMap, ids));
+}
+
+function isParallelFamily(family: SemanticFamily | null): family is SemanticFamily {
+  return family === "write" || family === "read" || family === "search";
+}
+
+function sameParent(left: Span, right: Span): boolean {
+  return (left.parentId ?? "") === (right.parentId ?? "");
+}
+
+function sameTimestampWave(left: Span, right: Span): boolean {
+  const start = new Date(left.startedAt).getTime();
+  const next = new Date(right.startedAt).getTime();
+  return Number.isFinite(start) && Number.isFinite(next) && Math.abs(next - start) <= 250;
+}
+
+function canCollapseParallel(previous: Span, span: Span): boolean {
+  if (isUserTurn(span) || isContextSpan(span) || span.type === "agent" || span.type === "system") {
+    return false;
+  }
+  const family = semanticFamily(span);
+  const previousFamily = semanticFamily(previous);
+  if (!family || family !== previousFamily) return false;
+  if (!isParallelFamily(family) && !sameTimestampWave(previous, span)) return false;
+  return sameParent(previous, span) || span.parentId === previous.id;
+}
+
+function remapCollapsedParents(
+  merged: Span[],
+  byId: Map<string, Span>,
+  idMap: Map<string, string>,
+  ids: Set<string>
+): Span[] {
   return merged.map((span) => {
     if (!span.parentId) return span;
     let mapped: string | null = idMap.get(span.parentId) ?? span.parentId;
@@ -415,6 +470,35 @@ export function collapseSemanticSpans(spans: Span[]): Span[] {
     }
     return { ...span, parentId: mapped };
   });
+}
+
+export function collapseParallelWaves(spans: Span[]): Span[] {
+  if (spans.length <= 1) return spans;
+  const sorted = byTime(spans);
+  const batches: Span[][] = [];
+
+  for (const span of sorted) {
+    const previous = batches.at(-1);
+    if (previous && canCollapseParallel(previous[previous.length - 1], span)) {
+      previous.push(span);
+      continue;
+    }
+    batches.push([span]);
+  }
+
+  const byId = new Map(spans.map((span) => [span.id, span]));
+  const idMap = new Map<string, string>();
+  const merged: Span[] = [];
+
+  for (const items of batches) {
+    const family = semanticFamily(items[0]);
+    const node = items.length === 1 ? items[0] : mergeGroup(items, family);
+    merged.push(node);
+    for (const item of items) idMap.set(item.id, node.id);
+  }
+
+  const ids = new Set(merged.map((span) => span.id));
+  return remapCollapsedParents(merged, byId, idMap, ids);
 }
 
 export function inferRunStatus(spans: Span[]): Trace["status"] {
@@ -660,20 +744,22 @@ export function applySemanticPlan(spans: Span[], nodes: SemanticNodePlan[]): Spa
   });
 
   const byMerged = new Map(remapped.map((span) => [span.id, span]));
-  return remapped
-    .map((span) => {
-      const seen = new Set<string>();
-      let current = span.parentId;
-      while (current) {
-        if (current === span.id || seen.has(current)) {
-          return { ...span, parentId: null };
+  return collapseParallelWaves(
+    remapped
+      .map((span) => {
+        const seen = new Set<string>();
+        let current = span.parentId;
+        while (current) {
+          if (current === span.id || seen.has(current)) {
+            return { ...span, parentId: null };
+          }
+          seen.add(current);
+          current = byMerged.get(current)?.parentId ?? null;
         }
-        seen.add(current);
-        current = byMerged.get(current)?.parentId ?? null;
-      }
-      return span;
-    })
-    .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+        return span;
+      })
+      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
+  );
 }
 
 export function compactSpanForModel(span: Span): Record<string, unknown> {
@@ -704,10 +790,10 @@ export function compactSpanForModel(span: Span): Record<string, unknown> {
 }
 
 export function displaySpans(trace: Trace): Span[] {
-  if (semanticGraphMatches(trace)) {
-    return trace.semanticGraph!.spans;
-  }
-  return collapseSemanticSpans(prepareSpans(trace.spans));
+  const spans = semanticGraphMatches(trace)
+    ? trace.semanticGraph!.spans
+    : collapseSemanticSpans(prepareSpans(trace.spans));
+  return collapseParallelWaves(spans);
 }
 
 export function resolveDisplaySpan(spans: Span[], spanId: string | null): Span | null {

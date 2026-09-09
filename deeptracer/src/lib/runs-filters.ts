@@ -1,7 +1,8 @@
 import { isDesktopAgentId, type AgentId } from "@/lib/agents/types";
+import { isConnectorSourceId, type ConnectorSourceId } from "@/lib/trace-source";
 
 export type RunsRangeKey = "today" | "7d" | "all";
-export type RunsAgentKey = "all" | AgentId | "example";
+export type RunsAgentKey = "all" | AgentId | "example" | ConnectorSourceId;
 export type RunsSortKey = "newest" | "oldest" | "duration" | "intent" | "name";
 
 export type RunsFilters = {
@@ -39,7 +40,11 @@ function isSortKey(value: unknown): value is RunsSortKey {
 }
 
 function isAgentKey(value: unknown): value is RunsAgentKey {
-  return value === "all" || value === "example" || (typeof value === "string" && isDesktopAgentId(value));
+  return (
+    value === "all" ||
+    value === "example" ||
+    (typeof value === "string" && (isDesktopAgentId(value) || isConnectorSourceId(value)))
+  );
 }
 
 function parseFilters(value: unknown): RunsFilters {

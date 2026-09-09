@@ -1,5 +1,5 @@
 import type { AgentId } from "@/lib/agents/types";
-import type { TraceSource } from "@/lib/trace-source";
+import { sourceLabel, type TraceSource } from "@/lib/trace-source";
 
 type MarkSource = TraceSource | AgentId;
 
@@ -48,23 +48,73 @@ function CursorMark({ className }: { className?: string }) {
 }
 
 export function sourceShortLabel(source: MarkSource): string {
-  switch (source) {
-    case "claude-code":
-      return "Claude";
-    case "codex":
-      return "GPT";
-    case "cursor":
-      return "Cursor";
-    default:
-      return "Example";
-  }
+  if (source === "claude-code") return "Claude";
+  if (source === "codex") return "GPT";
+  if (source === "cursor") return "Cursor";
+  if (source === "example") return "Example";
+  return sourceLabel(source);
+}
+
+function SlackMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M6.5 15.5A2.5 2.5 0 1 1 4 13h2.5v2.5Zm1.25 0A2.5 2.5 0 1 1 10.25 18V8.5A2.5 2.5 0 1 1 7.75 6v9.5ZM8.5 6.5A2.5 2.5 0 1 1 11 4v2.5H8.5Zm0 1.25A2.5 2.5 0 1 1 6 10.25h9.5A2.5 2.5 0 1 1 18 7.75H8.5ZM17.5 8.5A2.5 2.5 0 1 1 20 11h-2.5V8.5Zm-1.25 0A2.5 2.5 0 1 1 13.75 6v9.5a2.5 2.5 0 1 1 2.5 2.5V8.5ZM15.5 17.5A2.5 2.5 0 1 1 13 20v-2.5h2.5Zm0-1.25A2.5 2.5 0 1 1 18 13.75H8.5a2.5 2.5 0 1 1-2.5 2.5h9.5Z" />
+    </svg>
+  );
+}
+
+function KakaoMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 3C6.48 3 2 6.58 2 11c0 2.82 1.84 5.3 4.62 6.74L5.5 21.5 9.7 18.9c.74.16 1.51.25 2.3.25 5.52 0 10-3.58 10-8.15C22 6.58 17.52 3 12 3Z" />
+    </svg>
+  );
+}
+
+function EmailMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 3.2 8 5.4 8-5.4V7.1L12 12.4 4 7.1V8.2z" />
+    </svg>
+  );
+}
+
+function FilesMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h5.2l1.6 2H19.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11Z" />
+    </svg>
+  );
+}
+
+function LetterMark({ source, className }: { source: TraceSource; className?: string }) {
+  const letter = sourceLabel(source).replace(/[^A-Za-z]/g, "").slice(0, 1) || "?";
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-[3px] bg-zinc-700/90 text-[9px] font-semibold leading-none ${className}`}
+      aria-hidden
+    >
+      {letter}
+    </span>
+  );
+}
+
+function GitHubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className={className} fill="currentColor">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
 }
 
 export default function SourceLogo({ source, className = "h-3.5 w-3.5" }: SourceLogoProps) {
   if (source === "claude-code") return <ClaudeMark className={className} />;
   if (source === "codex") return <GptMark className={className} />;
   if (source === "cursor") return <CursorMark className={className} />;
-  return (
-    <span className={`inline-block rounded-full bg-zinc-600 ${className}`} aria-hidden />
-  );
+  if (source === "slack") return <SlackMark className={className} />;
+  if (source === "kakao") return <KakaoMark className={className} />;
+  if (source === "email") return <EmailMark className={className} />;
+  if (source === "files") return <FilesMark className={className} />;
+  if (source === "github") return <GitHubMark className={className} />;
+  return <LetterMark source={source} className={className} />;
 }

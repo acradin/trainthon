@@ -1,3 +1,5 @@
+import type { TraceSource } from "@/lib/trace-source";
+
 export const DESKTOP_AGENT_IDS = ["claude-code", "codex", "cursor"] as const;
 export type AgentId = (typeof DESKTOP_AGENT_IDS)[number];
 
@@ -37,7 +39,7 @@ export interface SyncResult {
     traceId: string;
     name: string;
     status: string;
-    source: AgentId;
+    source: TraceSource;
     spanCount: number;
   }>;
   errors: string[];

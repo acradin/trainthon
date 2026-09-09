@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import SourceLogo from "@/components/SourceLogo";
+import ConnectorSources from "@/components/ConnectorSources";
 import type { AgentId, DiscoveredAgent, SyncResult } from "@/lib/agents/types";
+import type { PublicConnector } from "@/lib/connectors/types";
 
 interface DiscoverResponse {
   success: boolean;
   agents?: DiscoveredAgent[];
+  connectors?: PublicConnector[];
   registry?: {
     registeredAt: string;
     lastSyncedAt?: string;
@@ -28,6 +31,7 @@ export default function AgentsPage() {
   const [syncing, setSyncing] = useState(false);
   const [adding, setAdding] = useState<AgentId | null>(null);
   const [agents, setAgents] = useState<DiscoveredAgent[]>([]);
+  const [connectors, setConnectors] = useState<PublicConnector[]>([]);
   const [registry, setRegistry] = useState<DiscoverResponse["registry"]>(null);
   const [sync, setSync] = useState<SyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +46,9 @@ export default function AgentsPage() {
       const response = await fetch("/api/agents/discover");
       const data: DiscoverResponse = await response.json();
       setAgents((data.agents ?? []).filter((agent) => agent.installed));
+      setConnectors(data.connectors ?? []);
       setRegistry(data.registry ?? null);
-      if (!data.registry?.agents.length) {
+      if (!data.registry?.agents.length && !data.connectors?.some((item) => item.connected)) {
         router.replace("/");
       }
     } catch (err) {
@@ -101,9 +106,9 @@ export default function AgentsPage() {
       <div className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[15px] font-medium">Agents</h1>
+            <h1 className="text-[15px] font-medium">Sources</h1>
             <p className="mt-0.5 text-[12px] text-zinc-500">
-              Only Claude, GPT, and Cursor desktop apps installed on this machine are listed.
+              Desktop agents plus open-source chat, git, docs, tickets, and local files.
             </p>
           </div>
           <button
@@ -167,7 +172,24 @@ export default function AgentsPage() {
             Scanned {sync.scanned} · imported {sync.imported} · skipped {sync.skipped} · failed runs {sync.failed}
           </p>
         )}
+        {sync?.errors?.length ? (
+          <ul className="mt-2 space-y-1">
+            {sync.errors.map((item) => (
+              <li key={item} className="text-[12px] text-red-400">
+                {item}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {error && <p className="mt-3 text-[13px] text-red-400">{error}</p>}
+        <ConnectorSources
+          connectors={connectors}
+          onChange={(next, nextSync) => {
+            setConnectors(next);
+            if (nextSync) setSync(nextSync);
+          }}
+          onError={setError}
+        />
         <p className="mt-6 text-[12px] text-zinc-600">
           Manual fallback:{" "}
           <Link href="/import" className="text-zinc-400 hover:text-zinc-200">

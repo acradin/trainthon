@@ -160,8 +160,8 @@ export default function TraceDetailPage({ params }: PageProps) {
       <div className="flex h-screen flex-col items-center justify-center bg-[#0b0b0c] text-zinc-200">
         <h1 className="text-lg font-medium">Run not found</h1>
         <p className="mt-1 text-sm text-zinc-500">{traceId}</p>
-        <Link href="/recall" className="mt-4 text-sm text-zinc-400 hover:text-zinc-200">
-          ← Recall
+        <Link href="/agents" className="mt-4 text-sm text-zinc-400 hover:text-zinc-200">
+          ← Sources
         </Link>
       </div>
     );
@@ -178,8 +178,8 @@ export default function TraceDetailPage({ params }: PageProps) {
         <div className="flex min-w-0 items-center gap-3">
           <BrandLockup compact />
           <span className="text-zinc-800">/</span>
-          <Link href="/recall" className="text-[13px] text-zinc-500 hover:text-zinc-200">
-            Recall
+          <Link href="/agents" className="text-[13px] text-zinc-500 hover:text-zinc-200">
+            Sources
           </Link>
           <span className="text-zinc-800">/</span>
           <Link href="/dashboard" className="text-[13px] text-zinc-500 hover:text-zinc-200">

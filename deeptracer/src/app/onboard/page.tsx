@@ -51,7 +51,7 @@ export default function OnboardPage() {
         return;
       }
         if (data.registry?.agents.length) {
-        router.replace("/recall");
+        router.replace("/agents");
         return;
       }
       setHomeDir(data.homeDir || "");
@@ -111,7 +111,7 @@ export default function OnboardPage() {
         })
       );
 
-      router.push("/recall");
+      router.push("/agents");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {

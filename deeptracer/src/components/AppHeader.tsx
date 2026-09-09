@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import BrandLockup from "@/components/BrandLockup";
 
 const links = [
-  { href: "/recall", label: "Recall" },
+  { href: "/agents", label: "Sources" },
   { href: "/dashboard", label: "Runs" },
-  { href: "/agents", label: "Agents" },
+  { href: "/recall", label: "Recall" },
 ];
 
 export default function AppHeader() {
@@ -40,7 +40,7 @@ export default function AppHeader() {
             })}
           </nav>
         </div>
-        <p className="hidden text-[13px] text-zinc-600 sm:block">Already found</p>
+        <p className="hidden text-[13px] text-zinc-600 sm:block">This machine</p>
       </div>
     </header>
   );

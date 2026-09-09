@@ -204,7 +204,7 @@ export default function ImportPage() {
                   <p className="mt-1 text-[12px] text-zinc-600">
                     Local sessions are scanned from{" "}
                     <Link href="/agents" className="text-zinc-400 hover:text-zinc-200">
-                      Agents
+                      Sources
                     </Link>
                     . This page is the manual fallback.
                   </p>

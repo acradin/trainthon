@@ -27,8 +27,8 @@ export default function HomePage() {
       try {
         const response = await fetch("/api/agents/discover");
         const data = await response.json();
-        if (data.registry?.agents?.length) {
-          router.replace("/recall");
+        if (data.registry?.agents?.length || data.connectors?.some((item: { connected?: boolean }) => item.connected)) {
+          router.replace("/agents");
           return;
         }
       } catch {

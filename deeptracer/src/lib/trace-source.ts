@@ -1,21 +1,79 @@
 import { Trace } from "@/types/trace";
 
-export type TraceSource = "claude-code" | "codex" | "cursor" | "example";
+export const CONNECTOR_SOURCE_IDS = [
+  "slack",
+  "mattermost",
+  "rocketchat",
+  "zulip",
+  "matrix",
+  "github",
+  "gitlab",
+  "gitea",
+  "outline",
+  "discourse",
+  "plane",
+  "openproject",
+  "bookstack",
+  "taiga",
+  "kakao",
+  "email",
+  "files",
+] as const;
+
+export type ConnectorSourceId = (typeof CONNECTOR_SOURCE_IDS)[number];
+
+export type TraceSource =
+  | "claude-code"
+  | "codex"
+  | "cursor"
+  | "example"
+  | ConnectorSourceId;
 
 export const OTHER_PROJECT = "Other";
 
+const KNOWN_SOURCES = new Set<string>([
+  "claude-code",
+  "codex",
+  "cursor",
+  "example",
+  ...CONNECTOR_SOURCE_IDS,
+]);
+
+const TRACE_PREFIXES: Array<[string, TraceSource]> = [
+  ["ccsess_", "claude-code"],
+  ["cc_", "claude-code"],
+  ["codex_", "codex"],
+  ["cx_", "codex"],
+  ["cursor_", "cursor"],
+  ["cu_", "cursor"],
+  ["sl_", "slack"],
+  ["mm_", "mattermost"],
+  ["rc_", "rocketchat"],
+  ["zu_", "zulip"],
+  ["mx_", "matrix"],
+  ["gh_", "github"],
+  ["gl_", "gitlab"],
+  ["gt_", "gitea"],
+  ["ol_", "outline"],
+  ["dc_", "discourse"],
+  ["pl_", "plane"],
+  ["op_", "openproject"],
+  ["bs_", "bookstack"],
+  ["tg_", "taiga"],
+  ["kk_", "kakao"],
+  ["em_", "email"],
+  ["fs_", "files"],
+];
+
+export function isConnectorSourceId(value: string): value is ConnectorSourceId {
+  return (CONNECTOR_SOURCE_IDS as readonly string[]).includes(value);
+}
+
 export function inferTraceSource(trace: Pick<Trace, "traceId" | "source">): TraceSource {
-  if (
-    trace.source === "claude-code" ||
-    trace.source === "codex" ||
-    trace.source === "cursor" ||
-    trace.source === "example"
-  ) {
-    return trace.source;
+  if (trace.source && KNOWN_SOURCES.has(trace.source)) return trace.source as TraceSource;
+  for (const [prefix, source] of TRACE_PREFIXES) {
+    if (trace.traceId.startsWith(prefix)) return source;
   }
-  if (trace.traceId.startsWith("cc_") || trace.traceId.startsWith("ccsess_")) return "claude-code";
-  if (trace.traceId.startsWith("cx_") || trace.traceId.startsWith("codex_")) return "codex";
-  if (trace.traceId.startsWith("cu_") || trace.traceId.startsWith("cursor_")) return "cursor";
   return "example";
 }
 
@@ -27,6 +85,40 @@ export function sourceLabel(source: TraceSource): string {
       return "Codex";
     case "cursor":
       return "Cursor";
+    case "slack":
+      return "Slack";
+    case "mattermost":
+      return "Mattermost";
+    case "rocketchat":
+      return "Rocket.Chat";
+    case "zulip":
+      return "Zulip";
+    case "matrix":
+      return "Matrix";
+    case "github":
+      return "GitHub";
+    case "gitlab":
+      return "GitLab";
+    case "gitea":
+      return "Gitea";
+    case "outline":
+      return "Outline";
+    case "discourse":
+      return "Discourse";
+    case "plane":
+      return "Plane";
+    case "openproject":
+      return "OpenProject";
+    case "bookstack":
+      return "BookStack";
+    case "taiga":
+      return "Taiga";
+    case "kakao":
+      return "KakaoTalk";
+    case "email":
+      return "Email";
+    case "files":
+      return "Files";
     default:
       return "Example";
   }

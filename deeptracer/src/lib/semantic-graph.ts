@@ -25,7 +25,8 @@ Each node is what a step obtained — a file, a page, a source, a decision — n
 Rules:
 - Keep "User Message" and "Context" as their own nodes. Do not merge them with tools. Keep those names.
 - Merge retries and tool calls that served the SAME artifact or goal into one node.
-- Do not merge unrelated artifacts. Reading auth.ts and writing README.md are two nodes.
+- Parallel tool calls in the same wave (same parent, no user/model turn between them) become one node named after the results. Writing index.html, styles.css, and app.js together is "index.html, styles.css +1", not three Write nodes.
+- Do not merge a write with a later read after a model reply. Reading auth.ts and writing README.md after thinking are two nodes.
 - Consecutive reads/greps of the same file become one File node named after the file.
 - Search + fetch that produced the same source become one node named after that source.
 - Label in English, short noun phrase, max 42 characters. Never "Search ×4", "Grep", "Read", "Shell", "web_search", or a raw tool name.

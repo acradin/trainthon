@@ -6,6 +6,7 @@ import { importCodexSessionFile } from "@/lib/importers/codex-session";
 import { importCursorSessionFile } from "@/lib/importers/cursor-session";
 import { saveTrace } from "@/lib/traces";
 import { getRegistry, saveRegistry } from "@/lib/local-store";
+import { syncConnectors } from "@/lib/connectors/sync";
 import { Trace } from "@/types/trace";
 
 const MAX_SESSIONS_PER_AGENT = 12;
@@ -78,5 +79,6 @@ export async function syncRegisteredAgents(agents?: RegisteredAgent[]): Promise<
     saveRegistry({ ...registry, lastSyncedAt: new Date().toISOString() });
   }
 
+  await syncConnectors(result);
   return result;
 }

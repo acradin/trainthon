@@ -29,7 +29,28 @@ export interface Trace {
   traceId: string;
   name: string;
   status: "success" | "failed" | "running";
-  source?: "claude-code" | "codex" | "cursor" | "example";
+  source?:
+    | "claude-code"
+    | "codex"
+    | "cursor"
+    | "example"
+    | "slack"
+    | "mattermost"
+    | "rocketchat"
+    | "zulip"
+    | "matrix"
+    | "github"
+    | "gitlab"
+    | "gitea"
+    | "outline"
+    | "discourse"
+    | "plane"
+    | "openproject"
+    | "bookstack"
+    | "taiga"
+    | "kakao"
+    | "email"
+    | "files";
   project?: string;
   startedAt: string;
   finishedAt?: string;
