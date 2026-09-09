@@ -1,226 +1,196 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { Trace, RootCauseAnalysis } from "@/types/trace";
-import { MOCK_TRACES, EXAMPLE_TRACE_JSON } from "@/data/mock-traces";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import type { AgentId, DiscoveredAgent, SyncResult } from "@/lib/agents/types";
 
-export default function Home() {
-  const [traceInput, setTraceInput] = useState("");
-  const [analysis, setAnalysis] = useState<RootCauseAnalysis | null>(null);
-  const [parsedTrace, setParsedTrace] = useState<Trace | null>(null);
-  const [loading, setLoading] = useState(false);
+interface DiscoverResponse {
+  success: boolean;
+  homeDir?: string;
+  agents?: DiscoveredAgent[];
+  registry?: { agents: Array<{ id: AgentId }>; lastSyncedAt?: string } | null;
+  error?: string;
+}
+
+function formatWhen(iso?: string): string {
+  if (!iso) return "No sessions yet";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Active just now";
+  if (mins < 60) return `Last session ${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Last session ${hours}h ago`;
+  return `Last session ${Math.floor(hours / 24)}d ago`;
+}
+
+export default function OnboardPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [homeDir, setHomeDir] = useState("");
+  const [agents, setAgents] = useState<DiscoveredAgent[]>([]);
+  const [selected, setSelected] = useState<AgentId[]>([]);
+  const [sync, setSync] = useState<SyncResult | null>(null);
 
-  const loadExample = (key: string) => {
-    const trace = MOCK_TRACES[key];
-    if (trace) {
-      setTraceInput(JSON.stringify(trace, null, 2));
-      setAnalysis(null);
-      setError(null);
-    }
-  };
+  useEffect(() => {
+    void load();
+  }, []);
 
-  const analyzeTrace = async () => {
+  const load = async () => {
     setLoading(true);
     setError(null);
-    setAnalysis(null);
-
     try {
-      const trace: Trace = JSON.parse(traceInput);
-      setParsedTrace(trace);
-
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trace }),
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.analysis) {
-        setAnalysis(data.analysis);
-      } else {
-        setError(data.error || "Analysis failed");
+      const response = await fetch("/api/agents/discover");
+      const data: DiscoverResponse = await response.json();
+      if (!data.success || !data.agents) {
+        setError(data.error || "Could not scan this machine.");
+        return;
       }
+      if (data.registry?.agents.length) {
+        router.replace("/dashboard");
+        return;
+      }
+      setHomeDir(data.homeDir || "");
+      setAgents(data.agents);
+      setSelected(data.agents.filter((agent) => agent.installed).map((agent) => agent.id));
     } catch (err) {
-      if (err instanceof SyntaxError) {
-        setError("Invalid JSON format. Please check your trace data.");
-      } else {
-        setError(err instanceof Error ? err.message : "Unknown error");
-      }
+      setError(err instanceof Error ? err.message : "Discover failed");
     } finally {
       setLoading(false);
     }
   };
 
+  const installedCount = agents.filter((agent) => agent.installed).length;
+  const canRegister = selected.length > 0 && !registering;
+
+  const statusText = useMemo(() => {
+    if (loading) return "Scanning this machine…";
+    if (installedCount === 0) return "No supported agents found";
+    return `${installedCount} agent${installedCount === 1 ? "" : "s"} found`;
+  }, [loading, installedCount]);
+
+  const toggle = (id: AgentId, installed: boolean) => {
+    if (!installed) return;
+    setSelected((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  };
+
+  const register = async () => {
+    setRegistering(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/agents/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentIds: selected, sync: true }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setError(data.error || "Registration failed");
+        return;
+      }
+      const result = data.sync as SyncResult | undefined;
+      setSync(result ?? null);
+
+      const failed = (result?.traces ?? []).filter((trace) => trace.status === "failed").slice(0, 3);
+      void Promise.all(
+        failed.map(async (item) => {
+          const traceRes = await fetch(`/api/traces/${item.traceId}`);
+          const traceData = await traceRes.json();
+          if (!traceData.success || !traceData.trace) return;
+          await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ trace: traceData.trace }),
+          });
+        })
+      );
+
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
-                <span className="text-xl">🔍</span>
-              </div>
-              <h1 className="text-3xl font-bold">DeepTracer</h1>
-            </div>
-            <Link href="/dashboard" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors">
-              Dashboard →
-            </Link>
-          </div>
-          <p className="text-slate-400 text-lg">
-            Don&apos;t debug the output. <span className="text-orange-400">Trace the cause.</span>
-          </p>
-        </header>
+    <div className="flex min-h-screen flex-col bg-[#0b0b0c] text-zinc-100">
+      <header className="flex h-12 items-center border-b border-zinc-800/80 px-4">
+        <Image src="/logo-dark.png" alt="deeptracer" width={154} height={40} className="h-7 w-auto" priority />
+      </header>
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          <section>
-            <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-                <h2 className="font-semibold">Trace JSON</h2>
-                <div className="flex gap-2">
-                  <button onClick={() => loadExample("rate-limit")} className="px-3 py-1 text-xs bg-slate-800 hover:bg-slate-700 rounded-md transition-colors">Rate Limit</button>
-                  <button onClick={() => loadExample("hallucination")} className="px-3 py-1 text-xs bg-slate-800 hover:bg-slate-700 rounded-md transition-colors">Hallucination</button>
-                  <button onClick={() => loadExample("logic-error")} className="px-3 py-1 text-xs bg-slate-800 hover:bg-slate-700 rounded-md transition-colors">Logic Error</button>
-                </div>
-              </div>
-              <textarea
-                value={traceInput}
-                onChange={(e) => setTraceInput(e.target.value)}
-                placeholder={EXAMPLE_TRACE_JSON}
-                className="w-full h-96 p-4 bg-transparent font-mono text-sm resize-none focus:outline-none placeholder-slate-600"
-              />
-              <div className="px-4 py-3 border-t border-slate-800">
+      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-10">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">Get started</p>
+        <h1 className="mt-2 text-[22px] font-medium tracking-tight">Register agents on this machine</h1>
+        <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-zinc-500">
+          DeepTracer reads local Claude Code and Codex session logs. You don’t upload traces — register an agent,
+          then we scan and analyze recent runs automatically.
+        </p>
+        <p className="mt-3 font-mono text-[11px] text-zinc-600">{statusText}{homeDir ? ` · ${homeDir}` : ""}</p>
+
+        <div className="mt-8 space-y-2">
+          {loading ? (
+            <div className="rounded-md border border-zinc-800/80 px-4 py-8 text-center text-[13px] text-zinc-500">
+              Looking for Claude Code and Codex…
+            </div>
+          ) : (
+            agents.map((agent) => {
+              const checked = selected.includes(agent.id);
+              return (
                 <button
-                  onClick={analyzeTrace}
-                  disabled={loading || !traceInput.trim()}
-                  className="w-full py-3 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-semibold transition-all"
+                  key={agent.id}
+                  type="button"
+                  onClick={() => toggle(agent.id, agent.installed)}
+                  disabled={!agent.installed}
+                  className={`flex w-full items-center justify-between rounded-md border px-4 py-3 text-left transition-colors ${
+                    !agent.installed
+                      ? "cursor-not-allowed border-zinc-900 bg-[#111113] opacity-50"
+                      : checked
+                        ? "border-zinc-600 bg-[#141416]"
+                        : "border-zinc-800/80 bg-[#111113] hover:border-zinc-700"
+                  }`}
                 >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Analyzing...
-                    </span>
-                  ) : "🔍 Analyze Root Cause"}
-                </button>
-              </div>
-            </div>
-
-            {parsedTrace && (
-              <div className="mt-4 bg-slate-900 rounded-xl border border-slate-800 p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <span className={parsedTrace.status === "failed" ? "text-red-400" : "text-green-400"}>
-                    {parsedTrace.status === "failed" ? "❌" : "✓"}
+                  <div>
+                    <div className="text-[14px] font-medium">{agent.name}</div>
+                    <div className="mt-0.5 text-[12px] text-zinc-500">
+                      {agent.installed
+                        ? `${agent.sessionCount} sessions · ${formatWhen(agent.lastActivity)}`
+                        : "Not installed"}
+                    </div>
+                    <div className="mt-1 font-mono text-[11px] text-zinc-600">{agent.path}</div>
+                  </div>
+                  <span className={`text-[12px] ${agent.installed ? "text-emerald-400/80" : "text-zinc-600"}`}>
+                    {agent.installed ? (checked ? "Selected" : "Found") : "Missing"}
                   </span>
-                  {parsedTrace.name}
-                </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-slate-500">Trace ID</span><p className="font-mono text-slate-300">{parsedTrace.traceId}</p></div>
-                  <div><span className="text-slate-500">Duration</span><p className="text-slate-300">{parsedTrace.duration ? `${parsedTrace.duration}ms` : "N/A"}</p></div>
-                  <div><span className="text-slate-500">Spans</span><p className="text-slate-300">{parsedTrace.spans.length}</p></div>
-                  <div><span className="text-slate-500">Status</span><p className={parsedTrace.status === "failed" ? "text-red-400" : "text-green-400"}>{parsedTrace.status.toUpperCase()}</p></div>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section>
-            {error && (
-              <div className="bg-red-950/50 border border-red-900 rounded-xl p-4 mb-4">
-                <h3 className="font-semibold text-red-400 mb-2">⚠️ Error</h3>
-                <p className="text-red-300 text-sm">{error}</p>
-              </div>
-            )}
-
-            {analysis && (
-              <div className="space-y-4">
-                {analysis.confidence < 70 && (
-                  <div className="bg-amber-950/50 border border-amber-700/50 rounded-xl p-4 flex items-start gap-3">
-                    <span className="text-2xl">⚠️</span>
-                    <div>
-                      <h4 className="font-semibold text-amber-400 mb-1">Low Confidence Analysis</h4>
-                      <p className="text-amber-200/80 text-sm">신뢰도가 {analysis.confidence}%로 낮습니다. 추가 검토를 권장합니다.</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-gradient-to-br from-red-950/50 to-orange-950/50 border border-red-900/50 rounded-xl p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-semibold text-red-400 flex items-center gap-2">🔴 Root Cause</h3>
-                    <span className={`px-2 py-1 rounded text-xs ${analysis.confidence >= 80 ? "bg-green-900/50 text-green-400" : analysis.confidence >= 70 ? "bg-slate-800 text-slate-300" : "bg-amber-900/50 text-amber-400"}`}>
-                      {analysis.confidence}% confidence
-                    </span>
-                  </div>
-                  <p className="text-lg leading-relaxed">{analysis.rootCause}</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                  <h3 className="font-semibold text-orange-400 mb-3 flex items-center gap-2">📍 First Error Span</h3>
-                  <div className="bg-slate-950 rounded-lg p-4 font-mono text-sm">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-slate-500">[{analysis.firstErrorSpan.id}]</span>
-                      <span className="text-slate-200">{analysis.firstErrorSpan.name}</span>
-                    </div>
-                    {analysis.firstErrorSpan.error && (
-                      <p className="text-red-400 text-xs mt-2 pl-4 border-l-2 border-red-800">{analysis.firstErrorSpan.error}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                  <h3 className="font-semibold text-yellow-400 mb-3 flex items-center gap-2">🔗 Error Propagation</h3>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {analysis.propagationPath.map((spanId, i) => (
-                      <div key={spanId} className="flex items-center gap-2">
-                        <span className="px-3 py-1 bg-slate-800 rounded-full text-sm font-mono">{spanId}</span>
-                        {i < analysis.propagationPath.length - 1 && <span className="text-slate-600">→</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                  <h3 className="font-semibold text-blue-400 mb-3 flex items-center gap-2">🔎 Evidence</h3>
-                  <div className="space-y-3">
-                    {analysis.evidence.map((ev, i) => (
-                      <div key={i} className="bg-slate-950 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-slate-500 font-mono text-xs">[{ev.spanId}]</span>
-                          <span className="text-slate-300 text-sm">{ev.spanName}</span>
-                        </div>
-                        <p className="text-slate-400 text-sm pl-4">{ev.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-green-950/50 to-emerald-950/50 border border-green-900/50 rounded-xl p-5">
-                  <h3 className="font-semibold text-green-400 mb-3 flex items-center gap-2">💡 Recommendation</h3>
-                  <p className="text-slate-200">{analysis.recommendation}</p>
-                </div>
-              </div>
-            )}
-
-            {!analysis && !error && (
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
-                <div className="text-6xl mb-4">🔍</div>
-                <h3 className="text-xl font-semibold mb-2">Paste your Trace JSON</h3>
-                <p className="text-slate-400 mb-4">Or try one of the example traces above</p>
-                <div className="text-sm text-slate-500"><p>Supports: Langfuse, LangSmith, custom formats</p></div>
-              </div>
-            )}
-          </section>
+                </button>
+              );
+            })
+          )}
         </div>
 
-        <footer className="mt-12 pt-8 border-t border-slate-800 text-center text-slate-500 text-sm">
-          <p>DeepTracer v0.1.0 — AI Agent Failure Debugging Platform</p>
-          <p className="mt-1">Find the first wrong decision.</p>
-        </footer>
-      </div>
-    </main>
+        {error && <p className="mt-4 text-[13px] text-red-400">{error}</p>}
+        {sync && (
+          <p className="mt-4 text-[12px] text-zinc-500">
+            Scanned {sync.scanned} · imported {sync.imported} · failed runs {sync.failed}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void register()}
+          disabled={!canRegister}
+          className="mt-8 rounded-md bg-[#e0783a] py-2.5 text-[13px] font-medium text-zinc-950 hover:bg-[#ec8a4e] disabled:bg-zinc-800 disabled:text-zinc-500"
+        >
+          {registering ? "Scanning sessions…" : "Register and analyze"}
+        </button>
+        <p className="mt-3 text-[12px] text-zinc-600">
+          Only session logs are read. Credentials and auth files are ignored.
+        </p>
+      </main>
+    </div>
   );
 }

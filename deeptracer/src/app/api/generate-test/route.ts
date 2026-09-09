@@ -96,7 +96,6 @@ Generate a comprehensive regression test that would catch this specific failure 
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.3,
       response_format: { type: "json_object" },
     });
 

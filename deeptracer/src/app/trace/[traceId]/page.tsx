@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, use } from "react";
+import { use, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Trace, Span, RootCauseAnalysis } from "@/types/trace";
+import { RootCauseAnalysis, Span, Trace } from "@/types/trace";
 import { MOCK_TRACES } from "@/data/mock-traces";
 import ExecutionGraph from "@/components/ExecutionGraph";
-import SpanDetail from "@/components/SpanDetail";
+import Inspector from "@/components/dag/Inspector";
+import Timeline from "@/components/dag/Timeline";
 import TestGenerator from "@/components/TestGenerator";
 
 interface PageProps {
@@ -13,71 +15,57 @@ interface PageProps {
 }
 
 function formatDuration(ms?: number): string {
-  if (!ms) return "N/A";
+  if (!ms) return "—";
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleString("ko-KR", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
+function runStatus(status: Trace["status"]): { label: string; className: string } {
+  switch (status) {
+    case "failed":
+      return { label: "Failed", className: "text-red-400" };
+    case "running":
+      return { label: "Running", className: "text-sky-400" };
+    default:
+      return { label: "Completed", className: "text-emerald-400" };
+  }
 }
 
 export default function TraceDetailPage({ params }: PageProps) {
   const { traceId } = use(params);
   const [trace, setTrace] = useState<Trace | null>(null);
-  const [allTraces, setAllTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<RootCauseAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
-  const [activeTab, setActiveTab] = useState<"graph" | "test">("graph");
+  const [view, setView] = useState<"graph" | "test">("graph");
 
   useEffect(() => {
-    fetchTrace();
-    fetchAllTraces();
+    const load = async () => {
+      setLoading(true);
+      setSelectedSpanId(null);
+      setView("graph");
+      try {
+        const response = await fetch(`/api/traces/${traceId}`);
+        const data = await response.json();
+        if (data.success && data.trace) {
+          setTrace(data.trace);
+        } else {
+          setTrace(Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null);
+        }
+      } catch {
+        setTrace(Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
   }, [traceId]);
-
-  const fetchTrace = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/traces/${traceId}`);
-      const data = await response.json();
-      if (data.success && data.trace) {
-        setTrace(data.trace);
-      } else {
-        const mockTrace = Object.values(MOCK_TRACES).find((t) => t.traceId === traceId);
-        setTrace(mockTrace || null);
-      }
-    } catch {
-      const mockTrace = Object.values(MOCK_TRACES).find((t) => t.traceId === traceId);
-      setTrace(mockTrace || null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAllTraces = async () => {
-    try {
-      const response = await fetch("/api/traces");
-      const data = await response.json();
-      if (data.success && data.traces) {
-        setAllTraces(data.traces);
-      } else {
-        setAllTraces(Object.values(MOCK_TRACES));
-      }
-    } catch {
-      setAllTraces(Object.values(MOCK_TRACES));
-    }
-  };
 
   const selectedSpan: Span | null = useMemo(() => {
     if (!trace || !selectedSpanId) return null;
-    return trace.spans.find((s) => s.id === selectedSpanId) || null;
+    return trace.spans.find((span) => span.id === selectedSpanId) || null;
   }, [trace, selectedSpanId]);
 
   const analyzeTrace = async (): Promise<RootCauseAnalysis | null> => {
@@ -93,6 +81,9 @@ export default function TraceDetailPage({ params }: PageProps) {
       if (data.success && data.analysis) {
         setAnalysis(data.analysis);
         setShowAnalysis(true);
+        if (data.analysis.firstErrorSpan?.id) {
+          setSelectedSpanId(data.analysis.firstErrorSpan.id);
+        }
         return data.analysis;
       }
       return null;
@@ -106,133 +97,143 @@ export default function TraceDetailPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-pulse">🔍</div>
-          <p className="text-slate-400">Loading trace...</p>
-        </div>
+      <div className="flex h-screen items-center justify-center bg-[#0b0b0c] text-zinc-400">
+        Loading run…
       </div>
     );
   }
 
   if (!trace) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">🔍</div>
-          <h1 className="text-2xl font-bold mb-2">Trace Not Found</h1>
-          <p className="text-slate-400 mb-6">The trace with ID &quot;{traceId}&quot; does not exist.</p>
-          <Link href="/dashboard" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">← Back to Dashboard</Link>
-        </div>
+      <div className="flex h-screen flex-col items-center justify-center bg-[#0b0b0c] text-zinc-200">
+        <h1 className="text-lg font-medium">Run not found</h1>
+        <p className="mt-1 text-sm text-zinc-500">{traceId}</p>
+        <Link href="/dashboard" className="mt-4 text-sm text-zinc-400 hover:text-zinc-200">
+          ← Runs
+        </Link>
       </div>
     );
   }
 
+  const status = runStatus(trace.status);
+  const shortId = trace.traceId.replace(/^trace_/, "#");
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-slate-400 hover:text-slate-200 transition-colors">← Dashboard</Link>
-            <div className="h-6 w-px bg-slate-700" />
-            <div className="flex items-center gap-3">
-              <span className={`text-xl ${trace.status === "failed" ? "text-red-400" : "text-green-400"}`}>{trace.status === "failed" ? "❌" : "✓"}</span>
-              <div>
-                <h1 className="font-semibold">{trace.name}</h1>
-                <p className="text-sm text-slate-500 font-mono">{trace.traceId}</p>
-              </div>
+    <div className="flex h-screen flex-col bg-[#0b0b0c] text-zinc-100">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href="/dashboard" className="flex items-center" aria-label="deeptracer">
+            <Image
+              src="/logo-dark.png"
+              alt="deeptracer"
+              width={154}
+              height={40}
+              className="h-6 w-auto"
+              priority
+            />
+          </Link>
+          <span className="text-zinc-800">/</span>
+          <Link href="/dashboard" className="text-[13px] text-zinc-500 hover:text-zinc-200">
+            Runs
+          </Link>
+          <span className="text-zinc-800">/</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-[14px] font-medium">{trace.name}</h1>
+              <span className="font-mono text-[12px] text-zinc-500">{shortId}</span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-slate-400"><span className="text-slate-500">Duration:</span> {formatDuration(trace.duration)}</div>
-            <div className="text-sm text-slate-400"><span className="text-slate-500">Started:</span> {formatDateTime(trace.startedAt)}</div>
-            {trace.status === "failed" && (
-              <button onClick={analyzeTrace} disabled={analyzing} className="px-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 disabled:from-slate-700 disabled:to-slate-700 rounded-lg text-sm font-medium transition-all">
-                {analyzing ? "Analyzing..." : "🔍 Analyze Root Cause"}
+          <span className={`text-[12px] ${status.className}`}>● {status.label}</span>
+          <span className="text-[12px] text-zinc-500">{formatDuration(trace.duration)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {trace.status === "failed" && (
+            <>
+              <button
+                onClick={() => setView("test")}
+                className={`rounded-md px-3 py-1.5 text-[12px] transition-colors ${
+                  view === "test"
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                }`}
+              >
+                Test
               </button>
-            )}
-          </div>
+              <button
+                onClick={() => void analyzeTrace()}
+                disabled={analyzing}
+                className="rounded-md bg-[#e0783a] px-3 py-1.5 text-[12px] font-medium text-zinc-950 hover:bg-[#ec8a4e] disabled:bg-zinc-800 disabled:text-zinc-500"
+              >
+                {analyzing ? "Analyzing…" : "Analyze Root Cause"}
+              </button>
+            </>
+          )}
         </div>
       </header>
 
       {analysis && showAnalysis && (
-        <div className="bg-gradient-to-r from-red-950/50 to-orange-950/50 border-b border-red-900/50 px-4 py-4 shrink-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-red-400 font-semibold">🔴 Root Cause Detected</span>
-                <span className={`px-2 py-0.5 rounded text-xs ${analysis.confidence >= 80 ? "bg-green-900/50 text-green-400" : analysis.confidence >= 70 ? "bg-slate-800 text-slate-300" : "bg-amber-900/50 text-amber-400"}`}>{analysis.confidence}% confidence</span>
+        <div className="shrink-0 border-b border-red-900/30 bg-red-950/20 px-4 py-2.5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2 text-[12px]">
+                <span className="text-red-400">Root cause</span>
+                <span className="text-zinc-500">{analysis.confidence}% confidence</span>
               </div>
-              <p className="text-slate-200 mb-3">{analysis.rootCause}</p>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400">First error span:</span>
-                <button onClick={() => setSelectedSpanId(analysis.firstErrorSpan.id)} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded font-mono text-xs transition-colors">{analysis.firstErrorSpan.name}</button>
-              </div>
+              <p className="text-[13px] text-zinc-200">{analysis.rootCause}</p>
             </div>
-            <button onClick={() => setShowAnalysis(false)} className="text-slate-500 hover:text-slate-300 transition-colors">✕</button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => {
+                  setSelectedSpanId(analysis.firstErrorSpan.id);
+                  setView("graph");
+                }}
+                className="rounded-md border border-zinc-800 px-2 py-1 font-mono text-[11px] text-zinc-300 hover:border-zinc-700"
+              >
+                {analysis.firstErrorSpan.name}
+              </button>
+              <button
+                onClick={() => setShowAnalysis(false)}
+                className="text-zinc-500 hover:text-zinc-300"
+              >
+                ×
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-48 bg-slate-900/50 border-r border-slate-800 overflow-y-auto shrink-0">
-          <div className="p-3 border-b border-slate-800"><h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Traces</h3></div>
-          <div className="divide-y divide-slate-800">
-            {allTraces.map((t) => (
-              <Link key={t.traceId} href={`/trace/${t.traceId}`} className={`block p-3 hover:bg-slate-800/50 transition-colors ${t.traceId === traceId ? "bg-slate-800/50 border-l-2 border-orange-500" : ""}`}>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm ${t.status === "failed" ? "text-red-400" : "text-green-400"}`}>{t.status === "failed" ? "✗" : "✓"}</span>
-                  <span className="text-sm truncate">{t.name}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </aside>
-
-        <main className="flex-1 overflow-y-auto p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-w-0 flex-1">
+          {view === "graph" ? (
+            <ExecutionGraph
+              spans={trace.spans}
+              selectedSpanId={selectedSpanId}
+              onSelectSpan={setSelectedSpanId}
+            />
+          ) : (
+            <div className="h-full overflow-y-auto p-4">
               <button
-                onClick={() => setActiveTab("graph")}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  activeTab === "graph"
-                    ? "bg-slate-800 text-white"
-                    : "text-slate-400 hover:text-white"
-                }`}
+                onClick={() => setView("graph")}
+                className="mb-3 text-[12px] text-zinc-500 hover:text-zinc-200"
               >
-                📊 Execution Graph
+                ← Back to canvas
               </button>
-              {trace.status === "failed" && (
-                <button
-                  onClick={() => setActiveTab("test")}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    activeTab === "test"
-                      ? "bg-purple-600 text-white"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  🧪 Regression Test
-                </button>
-              )}
+              <TestGenerator trace={trace} analysis={analysis} onAnalyze={analyzeTrace} />
             </div>
-            {activeTab === "graph" && (
-              <p className="text-sm text-slate-400">{trace.spans.length} spans • Click a span to view details</p>
-            )}
-          </div>
-
-          {activeTab === "graph" && (
-            <ExecutionGraph spans={trace.spans} selectedSpanId={selectedSpanId} onSelectSpan={setSelectedSpanId} />
           )}
-
-          {activeTab === "test" && trace.status === "failed" && (
-            <TestGenerator trace={trace} analysis={analysis} onAnalyze={analyzeTrace} />
-          )}
-        </main>
-
-        <aside className="w-96 bg-slate-900 border-l border-slate-800 shrink-0">
-          <SpanDetail span={selectedSpan} />
-        </aside>
+        </div>
+        {view === "graph" && selectedSpan && (
+          <Inspector span={selectedSpan} onClose={() => setSelectedSpanId(null)} />
+        )}
       </div>
+
+      {view === "graph" && (
+        <Timeline
+          spans={trace.spans}
+          selectedSpanId={selectedSpanId}
+          onSelectSpan={setSelectedSpanId}
+        />
+      )}
     </div>
   );
 }

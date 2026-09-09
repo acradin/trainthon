@@ -1,37 +1,60 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Trace } from "@/types/trace";
-import { MOCK_TRACES } from "@/data/mock-traces";
+import AppHeader from "@/components/AppHeader";
 
 function getRelativeTime(dateString: string): string {
   const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
+  const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
   if (diffMins < 1) return "just now";
   if (diffMins < 60) return `${diffMins}m ago`;
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function formatDuration(ms: number): string {
+function formatDuration(ms?: number): string {
+  if (!ms) return "—";
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function statusMark(status: Trace["status"]): { icon: string; label: string; className: string } {
+  if (status === "failed") return { icon: "×", label: "Failed", className: "text-red-400" };
+  if (status === "running") return { icon: "●", label: "Running", className: "text-sky-400" };
+  return { icon: "✓", label: "Completed", className: "text-emerald-400/80" };
+}
+
 export default function DashboardPage() {
+  const router = useRouter();
   const [traces, setTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "failed" | "success">("all");
-  const [seeding, setSeeding] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   useEffect(() => {
-    fetchTraces();
+    void bootstrap();
   }, []);
+
+  const bootstrap = async () => {
+    try {
+      const registryRes = await fetch("/api/agents/discover");
+      const registryData = await registryRes.json();
+      if (!registryData.registry?.agents?.length) {
+        router.replace("/");
+        return;
+      }
+      setRegistered(true);
+    } catch {
+      router.replace("/");
+      return;
+    }
+    await fetchTraces();
+  };
 
   const fetchTraces = async () => {
     setLoading(true);
@@ -41,30 +64,25 @@ export default function DashboardPage() {
       if (data.success && data.traces) {
         setTraces(data.traces);
       } else {
-        setTraces(Object.values(MOCK_TRACES));
+        setTraces([]);
       }
     } catch {
-      setTraces(Object.values(MOCK_TRACES));
+      setTraces([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const seedData = async () => {
-    setSeeding(true);
+  const scanNow = async () => {
+    setScanning(true);
     try {
-      const response = await fetch("/api/seed", { method: "POST" });
-      const data = await response.json();
-      if (data.success) {
-        await fetchTraces();
-      }
-    } catch (error) {
-      console.error("Seed failed:", error);
+      await fetch("/api/agents/sync", { method: "POST" });
+      await fetchTraces();
     } finally {
-      setSeeding(false);
+      setScanning(false);
     }
   };
-  
+
   const filteredTraces = traces.filter((trace) => {
     if (filter === "all") return true;
     if (filter === "failed") return trace.status === "failed";
@@ -75,99 +93,102 @@ export default function DashboardPage() {
   const successCount = traces.filter((t) => t.status === "success").length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
-                <span className="text-xl">🔍</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">DeepTracer</h1>
-                <p className="text-slate-400 text-sm">Agent Failure Debugging Platform</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {traces.length === 0 && !loading && (
-                <button
-                  onClick={seedData}
-                  disabled={seeding}
-                  className="px-4 py-2 bg-green-700 hover:bg-green-600 disabled:bg-slate-700 rounded-lg text-sm transition-colors"
-                >
-                  {seeding ? "Loading..." : "📥 Load Sample Data"}
-                </button>
-              )}
-              <Link href="/setup" className="px-4 py-2 bg-green-700 hover:bg-green-600 rounded-lg text-sm transition-colors">⚙️ Setup</Link>
-              <Link href="/import" className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded-lg text-sm transition-colors">📥 Import</Link>
-              <Link href="/" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors">Quick Analyze</Link>
-            </div>
-          </div>
-        </header>
+    <div className="flex min-h-screen flex-col bg-[#0b0b0c] text-zinc-100">
+      <AppHeader />
 
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="text-slate-400 text-sm mb-1">Total Traces</div>
-            <div className="text-2xl font-bold">{loading ? "..." : traces.length}</div>
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-[15px] font-medium">Runs</h1>
+            <p className="mt-0.5 text-[12px] text-zinc-500">
+              {loading
+                ? "Loading…"
+                : `${traces.length} runs · ${failedCount} failed · ${successCount} completed`}
+            </p>
           </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="text-slate-400 text-sm mb-1">Failed</div>
-            <div className="text-2xl font-bold text-red-400">{loading ? "..." : failedCount}</div>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="text-slate-400 text-sm mb-1">Success</div>
-            <div className="text-2xl font-bold text-green-400">{loading ? "..." : successCount}</div>
+          <div className="flex items-center gap-2">
+            {(["all", "failed", "success"] as const).map((key) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`rounded-md px-2.5 py-1 text-[12px] capitalize transition-colors ${
+                  filter === key
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+                }`}
+              >
+                {key === "success" ? "Completed" : key}
+              </button>
+            ))}
+            <button
+              onClick={() => void scanNow()}
+              disabled={scanning || !registered}
+              className="rounded-md px-2.5 py-1 text-[12px] text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300 disabled:text-zinc-700"
+            >
+              {scanning ? "Scanning…" : "Scan now"}
+            </button>
+            <button
+              onClick={() => void fetchTraces()}
+              className="rounded-md px-2.5 py-1 text-[12px] text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+            >
+              Refresh
+            </button>
           </div>
         </div>
 
-        <div className="flex gap-2 mb-6">
-          <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-lg text-sm transition-colors ${filter === "all" ? "bg-slate-700 text-white" : "bg-slate-900 text-slate-400 hover:bg-slate-800"}`}>All</button>
-          <button onClick={() => setFilter("failed")} className={`px-4 py-2 rounded-lg text-sm transition-colors ${filter === "failed" ? "bg-red-900/50 text-red-400" : "bg-slate-900 text-slate-400 hover:bg-slate-800"}`}>Failed</button>
-          <button onClick={() => setFilter("success")} className={`px-4 py-2 rounded-lg text-sm transition-colors ${filter === "success" ? "bg-green-900/50 text-green-400" : "bg-slate-900 text-slate-400 hover:bg-slate-800"}`}>Success</button>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-            <h2 className="font-semibold">Recent Traces</h2>
-            <button onClick={fetchTraces} className="text-slate-400 hover:text-slate-200 text-sm">↻ Refresh</button>
+        <div className="overflow-x-auto rounded-md border border-zinc-800/80 bg-[#111113]">
+          <div className="min-w-[760px]">
+          <div className="grid grid-cols-[minmax(0,1.4fr)_88px_72px_72px_88px_96px] gap-3 border-b border-zinc-800/80 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-zinc-600">
+            <span>Run</span>
+            <span>ID</span>
+            <span>Spans</span>
+            <span>Duration</span>
+            <span>When</span>
+            <span className="text-right">Status</span>
           </div>
-          
+
           {loading ? (
-            <div className="p-8 text-center text-slate-500">Loading traces...</div>
+            <div className="px-4 py-16 text-center text-[13px] text-zinc-600">Loading runs…</div>
           ) : filteredTraces.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              <div className="text-4xl mb-3">📭</div>
-              <p>No traces found</p>
-              <button onClick={seedData} disabled={seeding} className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors">
-                {seeding ? "Loading..." : "Load Sample Data"}
+            <div className="px-4 py-16 text-center">
+              <p className="text-[13px] text-zinc-400">No runs yet. Scan local agent sessions.</p>
+              <button
+                onClick={() => void scanNow()}
+                disabled={scanning}
+                className="mt-3 rounded-md border border-zinc-800 px-3 py-1.5 text-[12px] text-zinc-300 hover:border-zinc-700"
+              >
+                {scanning ? "Scanning…" : "Scan now"}
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-slate-800">
-              {filteredTraces.map((trace) => (
-                <Link key={trace.traceId} href={`/trace/${trace.traceId}`} className="flex items-center justify-between p-4 hover:bg-slate-800/50 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <span className={`text-xl ${trace.status === "failed" ? "text-red-400" : "text-green-400"}`}>{trace.status === "failed" ? "❌" : "✓"}</span>
-                    <div>
-                      <div className="font-medium">{trace.name}</div>
-                      <div className="text-sm text-slate-500 font-mono">{trace.traceId}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6 text-sm">
-                    <div className="text-slate-400">{trace.spans.length} spans</div>
-                    <div className="text-slate-400">{trace.duration ? formatDuration(trace.duration) : "N/A"}</div>
-                    <div className="text-slate-500 w-20 text-right">{getRelativeTime(trace.startedAt)}</div>
-                    <span className="text-slate-600">→</span>
-                  </div>
-                </Link>
-              ))}
+            <div>
+              {filteredTraces.map((trace) => {
+                const status = statusMark(trace.status);
+                return (
+                  <Link
+                    key={trace.traceId}
+                    href={`/trace/${trace.traceId}`}
+                    className={`grid grid-cols-[minmax(0,1.4fr)_88px_72px_72px_88px_96px] items-center gap-3 border-b border-zinc-800/60 px-4 py-2.5 last:border-b-0 hover:bg-zinc-900/50 ${
+                      trace.status === "failed" ? "border-l-2 border-l-red-500/70" : "border-l-2 border-l-transparent"
+                    }`}
+                  >
+                    <span className="truncate text-[13px] text-zinc-100">{trace.name}</span>
+                    <span className="truncate font-mono text-[11px] text-zinc-500">
+                      {trace.traceId.replace(/^trace_/, "#")}
+                    </span>
+                    <span className="text-[12px] text-zinc-400">{trace.spans.length}</span>
+                    <span className="text-[12px] text-zinc-400">{formatDuration(trace.duration)}</span>
+                    <span className="text-[12px] text-zinc-500">{getRelativeTime(trace.startedAt)}</span>
+                    <span className={`text-right text-[12px] ${status.className}`}>
+                      {status.icon} {status.label}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           )}
+          </div>
         </div>
-
-        <footer className="mt-12 pt-8 border-t border-slate-800 text-center text-slate-500 text-sm">
-          <p>DeepTracer v0.1.0 — Don&apos;t debug the output. Trace the cause.</p>
-        </footer>
       </div>
     </div>
   );

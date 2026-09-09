@@ -83,7 +83,6 @@ async function callOpenAIWithRetry(
           },
         ],
         response_format: { type: "json_object" },
-        temperature: 0.3,
       });
 
       const content = completion.choices[0]?.message?.content;

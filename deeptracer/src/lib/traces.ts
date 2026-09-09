@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { Trace, Span } from "@/types/trace";
+import { getLocalTraceById, getLocalTraces, mergeTraces, saveLocalTrace } from "@/lib/local-store";
 
 interface DbTrace {
   trace_id: string;
@@ -28,16 +29,32 @@ interface DbSpan {
   error: string | null;
 }
 
-export async function getTraces(): Promise<Trace[]> {
-  const { data: tracesData, error: tracesError } = await supabase
-    .from("traces")
-    .select("*")
-    .order("created_at", { ascending: false });
+function supabaseConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
 
-  if (tracesError) {
-    console.error("Error fetching traces:", tracesError);
-    return [];
+export async function getTraces(): Promise<Trace[]> {
+  const local = getLocalTraces();
+  if (!supabaseConfigured()) return local;
+
+  let tracesData: DbTrace[] | null = null;
+  try {
+    const { data, error: tracesError } = await supabase
+      .from("traces")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (tracesError) {
+      console.error("Error fetching traces:", tracesError);
+      return local;
+    }
+    tracesData = data as DbTrace[] | null;
+  } catch (error) {
+    console.error("Error fetching traces:", error);
+    return local;
   }
+
+  if (!tracesData?.length) return local;
 
   const traces: Trace[] = [];
 
@@ -75,18 +92,27 @@ export async function getTraces(): Promise<Trace[]> {
     });
   }
 
-  return traces;
+  return mergeTraces(local, traces);
 }
 
 export async function getTraceById(traceId: string): Promise<Trace | null> {
-  const { data: traceData, error: traceError } = await supabase
-    .from("traces")
-    .select("*")
-    .eq("trace_id", traceId)
-    .single();
+  const local = getLocalTraceById(traceId);
+  if (!supabaseConfigured()) return local;
 
-  if (traceError || !traceData) {
-    return null;
+  let traceData: DbTrace | null = null;
+  try {
+    const { data, error: traceError } = await supabase
+      .from("traces")
+      .select("*")
+      .eq("trace_id", traceId)
+      .single();
+
+    if (traceError || !data) {
+      return local;
+    }
+    traceData = data as DbTrace;
+  } catch {
+    return local;
   }
 
   const t = traceData as DbTrace;
@@ -113,7 +139,7 @@ export async function getTraceById(traceId: string): Promise<Trace | null> {
     error: s.error || undefined,
   }));
 
-  return {
+  const remote: Trace = {
     traceId: t.trace_id,
     name: t.name,
     status: t.status as Trace["status"],
@@ -122,11 +148,15 @@ export async function getTraceById(traceId: string): Promise<Trace | null> {
     duration: t.duration || undefined,
     spans,
   };
+  return local ?? remote;
 }
 
 export async function saveTrace(trace: Trace): Promise<boolean> {
   console.log("Saving trace:", trace.traceId);
-  
+  saveLocalTrace(trace);
+  if (!supabaseConfigured()) return true;
+
+  try {
   const { data: traceData, error: traceError } = await supabase.from("traces").upsert({
     trace_id: trace.traceId,
     name: trace.name,
@@ -138,7 +168,7 @@ export async function saveTrace(trace: Trace): Promise<boolean> {
 
   if (traceError) {
     console.error("Error saving trace:", traceError.message, traceError.details, traceError.hint);
-    return false;
+    return true;
   }
   
   console.log("Trace saved:", traceData);
@@ -165,6 +195,9 @@ export async function saveTrace(trace: Trace): Promise<boolean> {
     } else {
       console.log("Span saved:", spanData);
     }
+  }
+  } catch (error) {
+    console.error("Error saving trace to supabase:", error);
   }
 
   return true;

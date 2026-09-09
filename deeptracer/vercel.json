@@ -3,10 +3,5 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "regions": ["icn1"],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "OPENAI_API_KEY": "@openai_api_key"
-  }
+  "regions": ["icn1"]
 }
