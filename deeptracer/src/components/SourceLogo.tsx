@@ -99,6 +99,102 @@ function LetterMark({ source, className }: { source: TraceSource; className?: st
   );
 }
 
+function GitLabMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 21.2 16.4 8.1h-8.8L12 21.2ZM1.3 14.3 12 21.2 2.8 8.1 1.1 13.2a.7.7 0 0 0 .2 1.1ZM21.7 13.2 20 8.1 12 21.2l10.7-6.9a.7.7 0 0 0 .2-1.1ZM16.4 8.1 14.5 2.4a.5.5 0 0 0-1 0L12 6.9 16.4 8.1ZM9.5 2.4a.5.5 0 0 0-1 0L6.6 8.1 11 6.9 9.5 2.4Z" />
+    </svg>
+  );
+}
+
+function GiteaMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M4 13.5c0-4.2 3.6-7.5 8-7.5 3.2 0 6 1.8 7.2 4.4.6-.2 1.3-.1 1.8.3s.7 1.2.5 1.9c1 .9 1.5 2.1 1.5 3.4 0 2.8-2.5 5-5.6 5H8.6C5.5 21 3 18.8 3 16c0-.9.2-1.8.7-2.5H4Zm8-5.5c-3.3 0-6 2.5-6 5.5S8.7 19 12 19s6-2.5 6-5.5S15.3 8 12 8Zm-1.2 3.2h2.4v5.1h-2.4V11.2Zm0-2.3h2.4V10h-2.4V8.9Z" />
+    </svg>
+  );
+}
+
+function MattermostMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 3 4.2 7.5v9L12 21l7.8-4.5v-9L12 3Zm0 2.3 5.6 3.2v.9L12 12.6 6.4 9.4v-.9L12 5.3Zm-5.6 5.4 5.1 2.9v5.2L6.4 16V10.7Zm6.1 8.1v-5.2l5.1-2.9V16l-5.1 2.8Z" />
+    </svg>
+  );
+}
+
+function RocketChatMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 3c4.4 0 8 3 8 6.8 0 2.4-1.4 4.5-3.6 5.7L18 21l-4.2-2.4c-.6.1-1.2.2-1.8.2-4.4 0-8-3-8-6.8S7.6 3 12 3Zm-2.2 5.4a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm2.2 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm2.2 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z" />
+    </svg>
+  );
+}
+
+function ZulipMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M5 5.5h14l-8 6.5H19v6.5H5l8-6.5H5V5.5Z" />
+    </svg>
+  );
+}
+
+function MatrixMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M4 4h2.2v16H4V4Zm13.8 0H20v16h-2.2V4ZM8.2 7.2h2.1v9.6H8.2V7.2Zm5.5 0h2.1v9.6h-2.1V7.2Z" />
+    </svg>
+  );
+}
+
+function OutlineMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M7 3h8l5 5v13H7V3Zm8 1.8V8h3.2L15 4.8ZM9 11h8v1.5H9V11Zm0 3h8v1.5H9V14Zm0 3h5.5V18.5H9V17Z" />
+    </svg>
+  );
+}
+
+function DiscourseMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 3a9 9 0 0 0-9 9c0 1.4.3 2.7.9 3.9L3 21l5.3-1.4A9 9 0 1 0 12 3Zm-3.4 5.2h6.8v2.1l-4.2 3.4 4.2.1v2.1H8.6v-2.1l4.2-3.4-4.2-.1V8.2Z" />
+    </svg>
+  );
+}
+
+function PlaneMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M3.2 11.1 21 3.5 14.2 21l-3.3-6.2L3.2 11.1Zm5.7.8 4.1 2.2 1.6 3.1 3.4-8.7-9.1 3.4Z" />
+    </svg>
+  );
+}
+
+function OpenProjectMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M5 4h14v3.2H5V4Zm0 6.4h9.5V13.6H5V10.4Zm0 6.4h14V20H5v-3.2Z" />
+    </svg>
+  );
+}
+
+function BookStackMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M5 4h6.2v16H6.2A1.2 1.2 0 0 1 5 18.8V4Zm8 0h6.2v14.8A1.2 1.2 0 0 1 18 20h-5V4Z" />
+    </svg>
+  );
+}
+
+function TaigaMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
+      <path d="M12 3 4 8.2v7.6L12 21l8-5.2V8.2L12 3Zm0 2.4 5.6 3.6v.9L12 13.4 6.4 9.9v-.9L12 5.4Z" />
+    </svg>
+  );
+}
+
 function GitHubMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" aria-hidden className={className} fill="currentColor">
@@ -116,5 +212,17 @@ export default function SourceLogo({ source, className = "h-3.5 w-3.5" }: Source
   if (source === "email") return <EmailMark className={className} />;
   if (source === "files") return <FilesMark className={className} />;
   if (source === "github") return <GitHubMark className={className} />;
+  if (source === "gitlab") return <GitLabMark className={className} />;
+  if (source === "gitea") return <GiteaMark className={className} />;
+  if (source === "mattermost") return <MattermostMark className={className} />;
+  if (source === "rocketchat") return <RocketChatMark className={className} />;
+  if (source === "zulip") return <ZulipMark className={className} />;
+  if (source === "matrix") return <MatrixMark className={className} />;
+  if (source === "outline") return <OutlineMark className={className} />;
+  if (source === "discourse") return <DiscourseMark className={className} />;
+  if (source === "plane") return <PlaneMark className={className} />;
+  if (source === "openproject") return <OpenProjectMark className={className} />;
+  if (source === "bookstack") return <BookStackMark className={className} />;
+  if (source === "taiga") return <TaigaMark className={className} />;
   return <LetterMark source={source} className={className} />;
 }
