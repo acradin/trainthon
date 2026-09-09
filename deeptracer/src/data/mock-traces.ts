@@ -1,0 +1,320 @@
+import { Trace } from "@/types/trace";
+
+export const MOCK_TRACES: Record<string, Trace> = {
+  "rate-limit": {
+    traceId: "trace_001",
+    name: "Research Report Generation",
+    status: "failed",
+    startedAt: "2026-09-09T10:00:00Z",
+    finishedAt: "2026-09-09T10:00:45Z",
+    duration: 45000,
+    spans: [
+      {
+        id: "span_1",
+        traceId: "trace_001",
+        parentId: null,
+        name: "Planner Agent",
+        type: "agent",
+        status: "success",
+        startedAt: "2026-09-09T10:00:00Z",
+        finishedAt: "2026-09-09T10:00:02Z",
+        duration: 2000,
+        input: { query: "Generate a market research report on AI agents" },
+        output: { plan: ["search", "analyze", "write", "review"] },
+      },
+      {
+        id: "span_2",
+        traceId: "trace_001",
+        parentId: "span_1",
+        name: "Web Search",
+        type: "tool",
+        agent: "Research Agent",
+        status: "error",
+        startedAt: "2026-09-09T10:00:02Z",
+        finishedAt: "2026-09-09T10:00:05Z",
+        duration: 3000,
+        input: { query: "AI agent market size 2026" },
+        output: null,
+        error: "429 Too Many Requests - Rate limit exceeded",
+      },
+      {
+        id: "span_3",
+        traceId: "trace_001",
+        parentId: "span_2",
+        name: "Fallback Search",
+        type: "tool",
+        agent: "Research Agent",
+        status: "warning",
+        startedAt: "2026-09-09T10:00:05Z",
+        finishedAt: "2026-09-09T10:00:08Z",
+        duration: 3000,
+        input: { query: "AI agent market size 2026", source: "cache" },
+        output: { results: [{ title: "AI Market Report 2024", date: "2024-01-15" }] },
+      },
+      {
+        id: "span_4",
+        traceId: "trace_001",
+        parentId: "span_3",
+        name: "Data Analysis LLM",
+        type: "llm",
+        agent: "Research Agent",
+        status: "success",
+        startedAt: "2026-09-09T10:00:08Z",
+        finishedAt: "2026-09-09T10:00:15Z",
+        duration: 7000,
+        input: { context: "AI Market Report 2024 data...", task: "Extract key metrics" },
+        output: { metrics: { marketSize: "$50B", growth: "35%", note: "Data from 2024" } },
+      },
+      {
+        id: "span_5",
+        traceId: "trace_001",
+        parentId: "span_4",
+        name: "Report Writer",
+        type: "llm",
+        agent: "Writer Agent",
+        status: "success",
+        startedAt: "2026-09-09T10:00:15Z",
+        finishedAt: "2026-09-09T10:00:35Z",
+        duration: 20000,
+        input: { metrics: { marketSize: "$50B", growth: "35%" }, style: "executive summary" },
+        output: { report: "The AI agent market is valued at $50B with 35% growth..." },
+      },
+      {
+        id: "span_6",
+        traceId: "trace_001",
+        parentId: "span_5",
+        name: "Fact Checker",
+        type: "agent",
+        agent: "Reviewer Agent",
+        status: "error",
+        startedAt: "2026-09-09T10:00:35Z",
+        finishedAt: "2026-09-09T10:00:45Z",
+        duration: 10000,
+        input: { report: "The AI agent market is valued at $50B..." },
+        output: null,
+        error: "Fact check failed: Report uses outdated 2024 data for a 2026 report. Current market size is $85B.",
+      },
+    ],
+  },
+
+  "hallucination": {
+    traceId: "trace_002",
+    name: "Customer Support Query",
+    status: "failed",
+    startedAt: "2026-09-09T11:00:00Z",
+    finishedAt: "2026-09-09T11:00:30Z",
+    duration: 30000,
+    spans: [
+      {
+        id: "span_1",
+        traceId: "trace_002",
+        parentId: null,
+        name: "Query Classifier",
+        type: "llm",
+        status: "success",
+        startedAt: "2026-09-09T11:00:00Z",
+        finishedAt: "2026-09-09T11:00:02Z",
+        duration: 2000,
+        input: { query: "What is the refund policy for enterprise plans?" },
+        output: { category: "billing", intent: "refund_policy" },
+      },
+      {
+        id: "span_2",
+        traceId: "trace_002",
+        parentId: "span_1",
+        name: "Knowledge Base Retrieval",
+        type: "retrieval",
+        agent: "Support Agent",
+        status: "success",
+        startedAt: "2026-09-09T11:00:02Z",
+        finishedAt: "2026-09-09T11:00:05Z",
+        duration: 3000,
+        input: { query: "refund policy enterprise", k: 3 },
+        output: { 
+          documents: [
+            { id: "doc_1", content: "Standard refund policy: 30 days for monthly plans" },
+            { id: "doc_2", content: "Enterprise contracts are custom and non-refundable" },
+          ]
+        },
+      },
+      {
+        id: "span_3",
+        traceId: "trace_002",
+        parentId: "span_2",
+        name: "Response Generator",
+        type: "llm",
+        agent: "Support Agent",
+        status: "success",
+        startedAt: "2026-09-09T11:00:05Z",
+        finishedAt: "2026-09-09T11:00:12Z",
+        duration: 7000,
+        input: { 
+          query: "What is the refund policy for enterprise plans?",
+          context: "Standard refund policy: 30 days. Enterprise contracts are custom."
+        },
+        output: { 
+          response: "Enterprise plans have a 60-day refund window with full money-back guarantee.",
+          confidence: 0.85
+        },
+      },
+      {
+        id: "span_4",
+        traceId: "trace_002",
+        parentId: "span_3",
+        name: "Response Validator",
+        type: "agent",
+        status: "error",
+        startedAt: "2026-09-09T11:00:12Z",
+        finishedAt: "2026-09-09T11:00:30Z",
+        duration: 18000,
+        input: { 
+          response: "Enterprise plans have a 60-day refund window with full money-back guarantee.",
+          context_docs: ["doc_1", "doc_2"]
+        },
+        output: null,
+        error: "HALLUCINATION DETECTED: Response claims '60-day refund' but retrieved docs state 'non-refundable'. No source supports this claim.",
+      },
+    ],
+  },
+
+  "logic-error": {
+    traceId: "trace_003",
+    name: "SQL Query Generator",
+    status: "failed",
+    startedAt: "2026-09-09T12:00:00Z",
+    finishedAt: "2026-09-09T12:00:25Z",
+    duration: 25000,
+    spans: [
+      {
+        id: "span_1",
+        traceId: "trace_003",
+        parentId: null,
+        name: "Intent Parser",
+        type: "llm",
+        status: "success",
+        startedAt: "2026-09-09T12:00:00Z",
+        finishedAt: "2026-09-09T12:00:03Z",
+        duration: 3000,
+        input: { query: "Show me total revenue by region for Q3" },
+        output: { 
+          intent: "aggregate_query",
+          entities: { metric: "revenue", groupBy: "region", period: "Q3" }
+        },
+      },
+      {
+        id: "span_2",
+        traceId: "trace_003",
+        parentId: "span_1",
+        name: "Schema Lookup",
+        type: "tool",
+        status: "success",
+        startedAt: "2026-09-09T12:00:03Z",
+        finishedAt: "2026-09-09T12:00:05Z",
+        duration: 2000,
+        input: { tables: ["orders", "regions"] },
+        output: { 
+          schema: {
+            orders: ["id", "amount", "region_id", "created_at"],
+            regions: ["id", "name", "country"]
+          }
+        },
+      },
+      {
+        id: "span_3",
+        traceId: "trace_003",
+        parentId: "span_2",
+        name: "SQL Generator",
+        type: "llm",
+        status: "success",
+        startedAt: "2026-09-09T12:00:05Z",
+        finishedAt: "2026-09-09T12:00:10Z",
+        duration: 5000,
+        input: { 
+          intent: "aggregate_query",
+          schema: { orders: ["id", "amount", "region_id", "created_at"], regions: ["id", "name"] },
+          period: "Q3"
+        },
+        output: { 
+          sql: "SELECT r.name, SUM(o.amount) FROM orders o JOIN regions r ON o.region_id = r.id WHERE o.created_at >= '2026-07-01' GROUP BY r.name"
+        },
+      },
+      {
+        id: "span_4",
+        traceId: "trace_003",
+        parentId: "span_3",
+        name: "Query Executor",
+        type: "tool",
+        status: "success",
+        startedAt: "2026-09-09T12:00:10Z",
+        finishedAt: "2026-09-09T12:00:15Z",
+        duration: 5000,
+        input: { sql: "SELECT r.name, SUM(o.amount) FROM orders o JOIN regions r..." },
+        output: { 
+          results: [
+            { name: "North America", sum: 1500000 },
+            { name: "Europe", sum: 1200000 },
+            { name: "Asia", sum: 800000 }
+          ]
+        },
+      },
+      {
+        id: "span_5",
+        traceId: "trace_003",
+        parentId: "span_4",
+        name: "Result Formatter",
+        type: "llm",
+        status: "error",
+        startedAt: "2026-09-09T12:00:15Z",
+        finishedAt: "2026-09-09T12:00:25Z",
+        duration: 10000,
+        input: { 
+          results: [
+            { name: "North America", sum: 1500000 },
+            { name: "Europe", sum: 1200000 },
+            { name: "Asia", sum: 800000 }
+          ],
+          original_query: "Show me total revenue by region for Q3"
+        },
+        output: null,
+        error: "Validation failed: Q3 2026 ends on Sep 30, but query only includes data up to today (Sep 9). Results are incomplete and misleading. Should either wait until Q3 ends or clearly state 'Q3 to date'.",
+      },
+    ],
+  },
+};
+
+export const EXAMPLE_TRACE_JSON = `{
+  "traceId": "trace_example",
+  "name": "Your Agent Name",
+  "status": "failed",
+  "startedAt": "2026-09-09T10:00:00Z",
+  "finishedAt": "2026-09-09T10:00:30Z",
+  "duration": 30000,
+  "spans": [
+    {
+      "id": "span_1",
+      "traceId": "trace_example",
+      "parentId": null,
+      "name": "First Step",
+      "type": "agent",
+      "status": "success",
+      "startedAt": "2026-09-09T10:00:00Z",
+      "finishedAt": "2026-09-09T10:00:05Z",
+      "duration": 5000,
+      "input": { "query": "user input" },
+      "output": { "result": "output data" }
+    },
+    {
+      "id": "span_2",
+      "traceId": "trace_example",
+      "parentId": "span_1",
+      "name": "Second Step",
+      "type": "tool",
+      "status": "error",
+      "startedAt": "2026-09-09T10:00:05Z",
+      "finishedAt": "2026-09-09T10:00:10Z",
+      "duration": 5000,
+      "input": { "data": "from previous step" },
+      "error": "Error message here"
+    }
+  ]
+}`;
