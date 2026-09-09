@@ -16,8 +16,9 @@ export async function POST(request: NextRequest) {
     const selected = Array.isArray(body.agentIds) ? (body.agentIds as AgentId[]) : undefined;
     const discovered = discoverAgents();
     const now = new Date().toISOString();
+    const previous = getRegistry();
 
-    const agents: RegisteredAgent[] = discovered.agents
+    const incoming: RegisteredAgent[] = discovered.agents
       .filter((agent) => agent.installed)
       .filter((agent) => !selected || selected.includes(agent.id))
       .map((agent) => ({
@@ -28,15 +29,32 @@ export async function POST(request: NextRequest) {
         registeredAt: now,
       }));
 
-    if (agents.length === 0) {
+    if (incoming.length === 0) {
       return NextResponse.json(
         { success: false, error: "No installed agents selected." },
         { status: 400 }
       );
     }
 
+    let agents: RegisteredAgent[];
+    if (previous?.agents.length) {
+      const byId = new Map(previous.agents.map((agent) => [agent.id, agent]));
+      for (const agent of incoming) {
+        const existing = byId.get(agent.id);
+        byId.set(agent.id, {
+          ...agent,
+          registeredAt: existing?.registeredAt ?? agent.registeredAt,
+          enabled: true,
+        });
+      }
+      agents = [...byId.values()];
+    } else {
+      agents = incoming;
+    }
+
     const registry: AgentRegistry = {
-      registeredAt: now,
+      registeredAt: previous?.registeredAt ?? now,
+      lastSyncedAt: previous?.lastSyncedAt,
       agents,
     };
     saveRegistry(registry);

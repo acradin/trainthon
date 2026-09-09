@@ -3,7 +3,7 @@
 **Don't debug the output. Trace the cause.**
 
 - Version: v0.3 MVP
-- Status: In Development
+- Status: MVP Complete (auth deferred)
 - Product Type: Local-first AI Agent Debugging / Observability
 
 ---
@@ -26,6 +26,8 @@
 수동 Import와 OTLP collector는 보조 경로로 남긴다. 기본 경로는 로컬 자동 탐색이다.
 
 > DeepTracer는 **local-first**다. 로그는 이 앱이 실행 중인 컴퓨터에서만 읽을 수 있다. Vercel 같은 클라우드 배포본은 사용자 PC의 `~/.claude`, `~/.codex`에 접근하지 못한다.
+>
+> 설치 프로그램(Electron/Tauri)은 MVP에 필요 없다. 브라우저가 디스크를 여는 게 아니라, `npm run dev`로 띄운 Next 서버가 같은 머신의 세션 파일을 읽는다. 비개발자용 더블클릭 앱이나 클라우드 UI + sidecar는 이후 단계다.
 
 ---
 
@@ -79,15 +81,18 @@
 - 신뢰도 점수, first error span, propagation path, recommendation
 - 등록/스캔 직후 실패한 run 최대 3개를 자동 분석
 - Analyze 페이지에서 수동 JSON 분석도 가능 (보조)
+- 예제: Rate limit, Hallucination, Logic error, **Sub-agents** (`trace_004`)
+  - Orchestrator → Research / Browser 분기를 DAG에서 확인할 수 있다
 
 ### ✅ Feature 6: Regression Test 생성
 - Root Cause → Test Case 자동 변환
 - Copy / Download
 
-### ◻ Feature 7: Live OTLP Collection (보조)
+### ✅ Feature 7: Live OTLP Collection (보조)
 - `/api/collect` 엔드포인트
-- Claude Code / Codex를 collector로 보내는 설정은 고급 옵션
-- 기본 UX가 아님
+- `/setup` 가이드 (design system 정렬: 이모지/타입 색 없음)
+- `/import` 수동 JSON (Analyze와 같은 split layout)
+- 기본 UX가 아님. Agents 페이지에서 보조 링크로 진입
 
 ### ◻ Feature 8: 사용자 인증
 - 미구현. 로컬 사용이 기본이라 MVP에서 후순위
@@ -160,6 +165,7 @@ Execution DAG + Inspector
 - Dark theme only. Background `#0b0b0c`, accent `#e0783a`
 - 상세 규칙은 `docs/design-system.md`, DAG 규칙은 `docs/DESIGN.md`
 - 원칙: easy to read, not impressive. Emoji hero / type-colored nodes 금지
+- Import / Setup / Agents / Runs / Onboard 모두 동일 토큰 (`#0b0b0c`, accent `#e0783a`)
 
 ---
 
@@ -216,6 +222,8 @@ Execution DAG + Inspector
 ### Phase 0: Core Analysis ✅
 - [x] Root Cause Analysis API
 - [x] Mock / example traces (Analyze 보조 화면)
+  - Rate limit, Hallucination, Logic error
+  - Sub-agents 분기 예제 (`trace_004`, Orchestrator → Research / Browser)
 - [x] Analyze 페이지 (`/analyze`)
 
 ### Phase 1: Observability UI ✅
@@ -235,7 +243,7 @@ Execution DAG + Inspector
 - [x] Agent 등록 화면 (첫 진입)
 - [x] 세션 로그 자동 스캔 → Trace
 - [x] 실패 run 자동 분석
-- [x] 수동 Import / OTLP collect (보조)
+- [x] 수동 Import / OTLP collect (보조, design system 정렬)
 
 ### Phase 4: Platform
 - [x] Regression Test 생성
@@ -270,9 +278,9 @@ Execution DAG + Inspector
 | `/dashboard` | Runs 목록. 미등록이면 `/`로 이동 |
 | `/agents` | 등록된 agent 상태 + Scan now |
 | `/trace/[id]` | Execution DAG + Inspector + Timeline |
-| `/analyze` | JSON 붙여넣기 분석 (보조) |
-| `/import` | 수동 Import (보조, 기본 내비 제외) |
-| `/setup` | OTLP Auto Collection 가이드 (보조, 기본 내비 제외) |
+| `/analyze` | JSON 붙여넣기 분석 (보조). Sub-agents 예제 포함 |
+| `/import` | 수동 Import (보조). Agents에서 링크 |
+| `/setup` | OTLP live collection 가이드 (보조). Agents에서 링크 |
 
 기본 내비: **Runs / Agents / Analyze**
 
@@ -298,6 +306,8 @@ npm run dev
 # http://localhost:3000 에서 agent 등록
 ```
 
+저장소 루트 README: 프로젝트 소개와 실행 방법. 앱 README: `deeptracer/README.md`.
+
 ---
 
 ## 12. Success Metrics
@@ -313,6 +323,7 @@ npm run dev
 ## 13. Non-goals (this MVP)
 
 - 클라우드에서 사용자 PC 로그를 원격 수집하는 백그라운드 에이전트
+- 데스크톱 설치 패키지 (Electron / Tauri). 로컬 `npm run dev`면 충분
 - 모든 과거 세션의 전체 인제스트 (최근 N개만)
 - Node type별 색상, workflow builder UX
 - 멀티유저 인증 / 팀 워크스페이스

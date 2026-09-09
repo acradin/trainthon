@@ -3,6 +3,7 @@ import { AgentId, RegisteredAgent, SyncResult } from "@/lib/agents/types";
 import { filesForAgent } from "@/lib/agents/discover";
 import { importClaudeSessionFile } from "@/lib/importers/claude-session";
 import { importCodexSessionFile } from "@/lib/importers/codex-session";
+import { importCursorSessionFile } from "@/lib/importers/cursor-session";
 import { saveTrace } from "@/lib/traces";
 import { getRegistry, saveRegistry } from "@/lib/local-store";
 import { Trace } from "@/types/trace";
@@ -26,7 +27,9 @@ function newestFiles(paths: string[], limit: number): string[] {
 }
 
 function parseFile(id: AgentId, filePath: string): Trace | null {
-  return id === "claude-code" ? importClaudeSessionFile(filePath) : importCodexSessionFile(filePath);
+  if (id === "claude-code") return importClaudeSessionFile(filePath);
+  if (id === "cursor") return importCursorSessionFile(filePath);
+  return importCodexSessionFile(filePath);
 }
 
 export async function syncRegisteredAgents(agents?: RegisteredAgent[]): Promise<SyncResult> {

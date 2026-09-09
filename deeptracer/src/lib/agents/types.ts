@@ -1,4 +1,9 @@
-export type AgentId = "claude-code" | "codex";
+export const DESKTOP_AGENT_IDS = ["claude-code", "codex", "cursor"] as const;
+export type AgentId = (typeof DESKTOP_AGENT_IDS)[number];
+
+export function isDesktopAgentId(value: string): value is AgentId {
+  return (DESKTOP_AGENT_IDS as readonly string[]).includes(value);
+}
 
 export interface DiscoveredAgent {
   id: AgentId;

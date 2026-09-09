@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
+import SourceLogo from "@/components/SourceLogo";
 import type { AgentId, DiscoveredAgent, SyncResult } from "@/lib/agents/types";
 
 interface DiscoverResponse {
@@ -25,6 +26,7 @@ export default function AgentsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [adding, setAdding] = useState<AgentId | null>(null);
   const [agents, setAgents] = useState<DiscoveredAgent[]>([]);
   const [registry, setRegistry] = useState<DiscoverResponse["registry"]>(null);
   const [sync, setSync] = useState<SyncResult | null>(null);
@@ -39,7 +41,7 @@ export default function AgentsPage() {
     try {
       const response = await fetch("/api/agents/discover");
       const data: DiscoverResponse = await response.json();
-      setAgents(data.agents ?? []);
+      setAgents((data.agents ?? []).filter((agent) => agent.installed));
       setRegistry(data.registry ?? null);
       if (!data.registry?.agents.length) {
         router.replace("/");
@@ -48,6 +50,29 @@ export default function AgentsPage() {
       setError(err instanceof Error ? err.message : "Failed to load agents");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const addAgent = async (id: AgentId) => {
+    setAdding(id);
+    setError(null);
+    try {
+      const response = await fetch("/api/agents/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentIds: [id], sync: true }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setError(data.error || "Could not add agent");
+        return;
+      }
+      setRegistry(data.registry);
+      setSync(data.sync);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add agent");
+    } finally {
+      setAdding(null);
     }
   };
 
@@ -78,7 +103,7 @@ export default function AgentsPage() {
           <div>
             <h1 className="text-[15px] font-medium">Agents</h1>
             <p className="mt-0.5 text-[12px] text-zinc-500">
-              Local Claude Code and Codex logs are scanned from this machine.
+              Only Claude, GPT, and Cursor desktop apps installed on this machine are listed.
             </p>
           </div>
           <button
@@ -93,6 +118,8 @@ export default function AgentsPage() {
 
         {loading ? (
           <p className="text-[13px] text-zinc-500">Loading…</p>
+        ) : agents.length === 0 ? (
+          <p className="text-[13px] text-zinc-500">No Claude, GPT, or Cursor desktop app found on this machine.</p>
         ) : (
           <div className="space-y-2">
             {agents.map((agent) => {
@@ -103,16 +130,28 @@ export default function AgentsPage() {
                   className="rounded-md border border-zinc-800/80 bg-[#111113] px-4 py-3"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[14px]">{agent.name}</div>
-                      <div className="mt-0.5 text-[12px] text-zinc-500">
-                        {agent.installed ? `${agent.sessionCount} sessions found` : "Not installed"}
+                    <div className="flex min-w-0 items-start gap-3">
+                      <SourceLogo source={agent.id} className="mt-0.5 h-4 w-4 shrink-0 text-zinc-300" />
+                      <div>
+                        <div className="text-[14px]">{agent.name}</div>
+                        <div className="mt-0.5 text-[12px] text-zinc-500">
+                          {agent.sessionCount} sessions found
+                        </div>
+                        <div className="mt-1 font-mono text-[11px] text-zinc-600">{agent.path}</div>
                       </div>
-                      <div className="mt-1 font-mono text-[11px] text-zinc-600">{agent.path}</div>
                     </div>
-                    <span className={`text-[12px] ${registered ? "text-emerald-400/80" : "text-zinc-500"}`}>
-                      {registered ? "Registered" : agent.installed ? "Not registered" : "Missing"}
-                    </span>
+                    {registered ? (
+                      <span className="text-[12px] text-emerald-400/80">Registered</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void addAgent(agent.id)}
+                        disabled={adding !== null}
+                        className="rounded-md bg-[#e0783a] px-2.5 py-1 text-[12px] font-medium text-zinc-950 hover:bg-[#ec8a4e] disabled:bg-zinc-800 disabled:text-zinc-500"
+                      >
+                        {adding === agent.id ? "Adding…" : "Add"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );

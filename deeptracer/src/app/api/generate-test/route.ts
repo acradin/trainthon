@@ -87,7 +87,7 @@ ${analysis.recommendation}
 
 Generate a comprehensive regression test that would catch this specific failure mode.`;
 
-    const model = process.env.OPENAI_MODEL || "gpt-4o";
+    const model = process.env.OPENAI_MODEL || "gpt-5.6-luna";
     const openai = getOpenAI();
 
     const completion = await openai.chat.completions.create({

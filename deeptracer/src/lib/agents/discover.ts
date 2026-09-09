@@ -7,6 +7,10 @@ export function claudeHome(): string {
   return join(homedir(), ".claude");
 }
 
+export function cursorHome(): string {
+  return join(homedir(), ".cursor");
+}
+
 export function codexHome(): string {
   return join(homedir(), ".codex");
 }
@@ -66,30 +70,128 @@ export function listCodexSessionFiles(): string[] {
   return [...live, ...archived];
 }
 
+export function listCursorSessionFiles(): string[] {
+  return listFiles(join(cursorHome(), "projects"), ".jsonl", 6).filter((filePath) => {
+    const normalized = filePath.replace(/\\/g, "/").toLowerCase();
+    return normalized.includes("/agent-transcripts/") && !normalized.includes("/subagents/");
+  });
+}
+
+function localAppData(): string {
+  return process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
+}
+
+function appData(): string {
+  return process.env.APPDATA || join(homedir(), "AppData", "Roaming");
+}
+
+function hasNamedPackage(prefix: string): boolean {
+  if (process.platform !== "win32") return false;
+  const packages = join(localAppData(), "Packages");
+  if (!existsSync(packages)) return false;
+  try {
+    return readdirSync(packages).some((name) => name.toLowerCase().startsWith(prefix.toLowerCase()));
+  } catch {
+    return false;
+  }
+}
+
+function hasClaudeDesktop(): boolean {
+  if (process.platform === "darwin") {
+    return existsSync("/Applications/Claude.app") || existsSync("/Applications/Claude Code.app");
+  }
+  if (process.platform === "win32") {
+    const local = localAppData();
+    return (
+      hasNamedPackage("Claude_") ||
+      existsSync(join(local, "AnthropicClaude")) ||
+      existsSync(join(local, "Programs", "Claude")) ||
+      existsSync(join(local, "Programs", "Claude Code"))
+    );
+  }
+  return existsSync("/usr/share/applications/claude.desktop");
+}
+
+function hasCursorDesktop(): boolean {
+  if (process.platform === "darwin") {
+    return existsSync("/Applications/Cursor.app");
+  }
+  if (process.platform === "win32") {
+    const local = localAppData();
+    const roaming = appData();
+    return (
+      existsSync(join(roaming, "Cursor")) ||
+      existsSync(join(local, "Programs", "cursor")) ||
+      existsSync(join(local, "Programs", "Cursor")) ||
+      existsSync(join(local, "cursor")) ||
+      existsSync("C:\\Program Files\\Cursor")
+    );
+  }
+  return (
+    existsSync("/usr/share/applications/cursor.desktop") ||
+    existsSync(join(homedir(), ".local", "share", "applications", "cursor.desktop"))
+  );
+}
+
+function hasCodexDesktop(): boolean {
+  if (process.platform === "darwin") {
+    return existsSync("/Applications/ChatGPT.app") || existsSync("/Applications/Codex.app");
+  }
+  if (process.platform === "win32") {
+    const local = localAppData();
+    return (
+      existsSync(join(local, "Programs", "OpenAI", "Codex")) ||
+      existsSync(join(local, "Programs", "OpenAI", "ChatGPT")) ||
+      existsSync(join(local, "Programs", "ChatGPT")) ||
+      existsSync(join(local, "ChatGPT")) ||
+      hasNamedPackage("ChatGPT") ||
+      hasNamedPackage("OpenAI")
+    );
+  }
+  return existsSync("/usr/share/applications/chatgpt.desktop");
+}
+
 export function discoverAgents(): { localAccess: true; homeDir: string; agents: DiscoveredAgent[] } {
   const claudePath = claudeHome();
   const codexPath = codexHome();
+  const cursorPath = cursorHome();
   const claudeFiles = existsSync(claudePath) ? listClaudeSessionFiles() : [];
   const codexFiles = existsSync(codexPath) ? listCodexSessionFiles() : [];
+  const cursorFiles = existsSync(cursorPath) ? listCursorSessionFiles() : [];
+  const agents: DiscoveredAgent[] = [];
 
-  const agents: DiscoveredAgent[] = [
-    {
+  if (hasClaudeDesktop()) {
+    agents.push({
       id: "claude-code",
-      name: "Claude Code",
-      installed: existsSync(claudePath) && (existsSync(join(claudePath, "settings.json")) || claudeFiles.length > 0),
+      name: "Claude",
+      installed: true,
       path: claudePath,
       sessionCount: claudeFiles.length,
       lastActivity: newestMtime(claudeFiles),
-    },
-    {
+    });
+  }
+
+  if (hasCodexDesktop()) {
+    agents.push({
       id: "codex",
-      name: "Codex",
-      installed: existsSync(codexPath) && (existsSync(join(codexPath, "config.toml")) || codexFiles.length > 0),
+      name: "GPT",
+      installed: true,
       path: codexPath,
       sessionCount: codexFiles.length,
       lastActivity: newestMtime(codexFiles),
-    },
-  ];
+    });
+  }
+
+  if (hasCursorDesktop()) {
+    agents.push({
+      id: "cursor",
+      name: "Cursor",
+      installed: true,
+      path: cursorPath,
+      sessionCount: cursorFiles.length,
+      lastActivity: newestMtime(cursorFiles),
+    });
+  }
 
   return {
     localAccess: true,
@@ -100,5 +202,6 @@ export function discoverAgents(): { localAccess: true; homeDir: string; agents: 
 
 export function filesForAgent(id: AgentId): string[] {
   if (id === "claude-code") return listClaudeSessionFiles();
+  if (id === "cursor") return listCursorSessionFiles();
   return listCodexSessionFiles();
 }

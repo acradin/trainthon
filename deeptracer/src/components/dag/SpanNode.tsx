@@ -3,6 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Span } from "@/types/trace";
 import { SpanNodeData } from "@/lib/dag-layout";
+import { spanKindLabel } from "@/lib/semantic-spans";
 
 function formatDuration(ms?: number): string {
   if (!ms) return "—";
@@ -23,25 +24,12 @@ function statusMark(status: Span["status"]): { icon: string; className: string }
   }
 }
 
-function typeLabel(type: Span["type"]): string {
-  switch (type) {
-    case "llm":
-      return "LLM";
-    case "tool":
-      return "Tool";
-    case "agent":
-      return "Agent";
-    case "memory":
-      return "Memory";
-    case "retrieval":
-      return "Retrieval";
-    case "system":
-      return "System";
-  }
+function typeLabel(span: Span): string {
+  return spanKindLabel(span);
 }
 
 export default function SpanNode({ data, selected }: NodeProps<Node<SpanNodeData>>) {
-  const { span } = data;
+  const { span, isStart } = data;
   const mark = statusMark(span.status);
   const failed = span.status === "error";
 
@@ -58,7 +46,9 @@ export default function SpanNode({ data, selected }: NodeProps<Node<SpanNodeData
             ? "border-[#e0783a] shadow-[0_0_0_1px_rgba(224,120,58,0.35)]"
             : failed
               ? "border-zinc-800 border-l-red-500/70"
-              : "border-zinc-800"
+              : isStart
+                ? "border-zinc-800 border-l-[#e0783a]/80"
+                : "border-zinc-800"
         }`}
       >
         <div className="flex items-start gap-1.5">
@@ -68,7 +58,8 @@ export default function SpanNode({ data, selected }: NodeProps<Node<SpanNodeData
               {span.name}
             </div>
             <div className="mt-0.5 text-[11px] leading-tight text-zinc-500">
-              {typeLabel(span.type)}
+              {isStart ? "Start · " : ""}
+              {typeLabel(span)}
             </div>
             <div className={`mt-1.5 flex items-center gap-1.5 text-[11px] leading-none ${mark.className}`}>
               <span>{mark.icon}</span>

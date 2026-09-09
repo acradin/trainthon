@@ -9,6 +9,9 @@ import ExecutionGraph from "@/components/ExecutionGraph";
 import Inspector from "@/components/dag/Inspector";
 import Timeline from "@/components/dag/Timeline";
 import TestGenerator from "@/components/TestGenerator";
+import SourceLogo, { sourceShortLabel } from "@/components/SourceLogo";
+import { presentTrace } from "@/lib/semantic-spans";
+import { inferProject, inferTraceSource } from "@/lib/trace-source";
 
 interface PageProps {
   params: Promise<{ traceId: string }>;
@@ -23,11 +26,11 @@ function formatDuration(ms?: number): string {
 function runStatus(status: Trace["status"]): { label: string; className: string } {
   switch (status) {
     case "failed":
-      return { label: "Failed", className: "text-red-400" };
+      return { label: "Off intent", className: "text-amber-400/90" };
     case "running":
       return { label: "Running", className: "text-sky-400" };
     default:
-      return { label: "Completed", className: "text-emerald-400" };
+      return { label: "Ran", className: "text-zinc-500" };
   }
 }
 
@@ -50,12 +53,14 @@ export default function TraceDetailPage({ params }: PageProps) {
         const response = await fetch(`/api/traces/${traceId}`);
         const data = await response.json();
         if (data.success && data.trace) {
-          setTrace(data.trace);
+          setTrace(presentTrace(data.trace));
         } else {
-          setTrace(Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null);
+          const fallback = Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null;
+          setTrace(fallback ? presentTrace(fallback) : null);
         }
       } catch {
-        setTrace(Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null);
+        const fallback = Object.values(MOCK_TRACES).find((item) => item.traceId === traceId) || null;
+        setTrace(fallback ? presentTrace(fallback) : null);
       } finally {
         setLoading(false);
       }
@@ -117,12 +122,14 @@ export default function TraceDetailPage({ params }: PageProps) {
 
   const status = runStatus(trace.status);
   const shortId = trace.traceId.replace(/^trace_/, "#");
+  const source = inferTraceSource(trace);
+  const projectName = inferProject(trace);
 
   return (
     <div className="flex h-screen flex-col bg-[#0b0b0c] text-zinc-100">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/dashboard" className="flex items-center" aria-label="deeptracer">
+          <Link href="/" className="flex items-center" aria-label="deeptracer">
             <Image
               src="/logo-dark.png"
               alt="deeptracer"
@@ -137,47 +144,55 @@ export default function TraceDetailPage({ params }: PageProps) {
             Runs
           </Link>
           <span className="text-zinc-800">/</span>
+          {projectName ? (
+            <>
+              <span className="shrink-0 text-[13px] text-zinc-400">{projectName}</span>
+              <span className="text-zinc-800">/</span>
+            </>
+          ) : null}
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-[14px] font-medium">{trace.name}</h1>
-              <span className="font-mono text-[12px] text-zinc-500">{shortId}</span>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-[14px] font-medium" title={trace.name}>
+                {trace.name}
+              </h1>
+              <span className="shrink-0 font-mono text-[12px] text-zinc-500">{shortId}</span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[12px] text-zinc-500">
+                <SourceLogo source={source} className="h-3.5 w-3.5" />
+                {sourceShortLabel(source)}
+              </span>
             </div>
           </div>
           <span className={`text-[12px] ${status.className}`}>● {status.label}</span>
           <span className="text-[12px] text-zinc-500">{formatDuration(trace.duration)}</span>
         </div>
         <div className="flex items-center gap-2">
-          {trace.status === "failed" && (
-            <>
-              <button
-                onClick={() => setView("test")}
-                className={`rounded-md px-3 py-1.5 text-[12px] transition-colors ${
-                  view === "test"
-                    ? "bg-zinc-800 text-zinc-100"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                }`}
-              >
-                Test
-              </button>
-              <button
-                onClick={() => void analyzeTrace()}
-                disabled={analyzing}
-                className="rounded-md bg-[#e0783a] px-3 py-1.5 text-[12px] font-medium text-zinc-950 hover:bg-[#ec8a4e] disabled:bg-zinc-800 disabled:text-zinc-500"
-              >
-                {analyzing ? "Analyzing…" : "Analyze Root Cause"}
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => setView("test")}
+            className={`rounded-md px-3 py-1.5 text-[12px] transition-colors ${
+              view === "test"
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+            }`}
+          >
+            Test
+          </button>
+          <button
+            onClick={() => void analyzeTrace()}
+            disabled={analyzing}
+            className="rounded-md bg-[#e0783a] px-3 py-1.5 text-[12px] font-medium text-zinc-950 hover:bg-[#ec8a4e] disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            {analyzing ? "Reading…" : "Review intent"}
+          </button>
         </div>
       </header>
 
       {analysis && showAnalysis && (
-        <div className="shrink-0 border-b border-red-900/30 bg-red-950/20 px-4 py-2.5">
+        <div className="shrink-0 border-b border-zinc-800/80 bg-[#111113] px-4 py-2.5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2 text-[12px]">
-                <span className="text-red-400">Root cause</span>
-                <span className="text-zinc-500">{analysis.confidence}% confidence</span>
+                <span className="text-zinc-500">Intent check</span>
+                <span className="text-zinc-600">{analysis.confidence}%</span>
               </div>
               <p className="text-[13px] text-zinc-200">{analysis.rootCause}</p>
             </div>

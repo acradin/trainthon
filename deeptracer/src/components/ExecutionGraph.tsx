@@ -16,6 +16,7 @@ import {
 } from "@xyflow/react";
 import { Span } from "@/types/trace";
 import { layoutSpans, styleEdges, type SpanFlowNode } from "@/lib/dag-layout";
+import { prepareSpans } from "@/lib/semantic-spans";
 import SpanNode from "@/components/dag/SpanNode";
 
 import "@xyflow/react/dist/style.css";
@@ -30,7 +31,7 @@ const nodeTypes = { span: SpanNode };
 
 function GraphCanvas({ spans, selectedSpanId, onSelectSpan }: ExecutionGraphProps) {
   const { fitView } = useReactFlow();
-  const layout = useMemo(() => layoutSpans(spans), [spans]);
+  const layout = useMemo(() => layoutSpans(prepareSpans(spans)), [spans]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<SpanFlowNode>(layout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(layout.edges);

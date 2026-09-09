@@ -1,6 +1,9 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { Span, Trace } from "@/types/trace";
+import { inferRunStatus, prepareSpans } from "@/lib/semantic-spans";
+import { pickRunTitle } from "@/lib/run-title";
+import { folderFromPath } from "@/lib/trace-source";
 
 const MAX_FILE_BYTES = 6_000_000;
 const MAX_LINES = 2500;
@@ -55,14 +58,27 @@ function textOf(value: unknown): string {
   return "";
 }
 
-function decodeProjectName(folder: string): string {
-  return folder
-    .replace(/^C--/, "C:/")
-    .replace(/--/g, "/")
-    .replace(/-/g, "/")
-    .split("/")
-    .filter(Boolean)
-    .at(-1) || folder;
+function cwdFromEvents(events: JsonRecord[]): string | undefined {
+  for (const event of events) {
+    const git = asRecord(event.git);
+    const message = asRecord(event.message);
+    const payload = asRecord(event.payload);
+    const cwd =
+      folderFromPath(event.cwd) ||
+      folderFromPath(git?.cwd) ||
+      folderFromPath(message?.cwd) ||
+      folderFromPath(payload?.cwd);
+    if (cwd) return cwd;
+  }
+  return undefined;
+}
+
+function projectFromSessionFile(filePath: string, events: JsonRecord[]): string | undefined {
+  const fromCwd = cwdFromEvents(events);
+  if (fromCwd) return fromCwd;
+  const folder = basename(dirname(filePath));
+  if (!folder || folder === "transcripts" || folder.includes("--")) return undefined;
+  return folderFromPath(folder) ?? folder;
 }
 
 function sessionIdFromFile(filePath: string): string {
@@ -80,6 +96,8 @@ function parseTranscript(filePath: string, events: JsonRecord[]): Trace | null {
   let title = "";
   let lastToolId: string | null = null;
   let index = 0;
+  let currentUserId: string | null = null;
+  let lastSpanId: string | null = null;
 
   for (const event of events) {
     const type = String(event.type ?? "");
@@ -87,10 +105,11 @@ function parseTranscript(filePath: string, events: JsonRecord[]): Trace | null {
     if (type === "user") {
       const content = truncate(textOf(event.content));
       if (!title && content) title = content;
+      const id = `${traceId}_${++index}`;
       pushSpan(spans, {
-        id: `${traceId}_${++index}`,
+        id,
         traceId,
-        parentId: null,
+        parentId: lastSpanId,
         name: "User Message",
         type: "agent",
         agent: "Claude Code",
@@ -98,13 +117,15 @@ function parseTranscript(filePath: string, events: JsonRecord[]): Trace | null {
         startedAt,
         input: content ? { message: content } : undefined,
       });
+      currentUserId = id;
+      lastSpanId = id;
     } else if (type === "tool_use") {
       const name = String(event.tool_name || event.name || "Tool");
       lastToolId = `${traceId}_${index + 1}`;
       pushSpan(spans, {
         id: lastToolId,
         traceId,
-        parentId: spans[0]?.id ?? null,
+        parentId: currentUserId ?? lastSpanId,
         name,
         type: "tool",
         agent: "Claude Code",
@@ -112,6 +133,7 @@ function parseTranscript(filePath: string, events: JsonRecord[]): Trace | null {
         startedAt,
         input: asRecord(event.tool_input) ?? (event.tool_input ? { input: event.tool_input } : undefined),
       });
+      lastSpanId = lastToolId;
       index += 1;
     } else if (type === "tool_result") {
       const isError = event.is_error === true || event.isError === true;
@@ -126,7 +148,7 @@ function parseTranscript(filePath: string, events: JsonRecord[]): Trace | null {
         pushSpan(spans, {
           id: `${traceId}_${++index}`,
           traceId,
-          parentId: spans[0]?.id ?? null,
+          parentId: currentUserId ?? lastSpanId,
           name: String(event.tool_name || "Tool Result"),
           type: "tool",
           agent: "Claude Code",
@@ -135,12 +157,14 @@ function parseTranscript(filePath: string, events: JsonRecord[]): Trace | null {
           output: output ? { result: output } : undefined,
           error: isError ? output || "Tool failed" : undefined,
         });
+        lastSpanId = spans[spans.length - 1]?.id ?? lastSpanId;
       }
     }
   }
 
   if (spans.length === 0) return null;
-  return toTrace(traceId, title || `Claude Code · ${decodeProjectName(dirname(filePath))}`, spans, "transcript");
+  const project = projectFromSessionFile(filePath, events);
+  return toTrace(traceId, title || (project ? `Claude Code · ${project}` : "Claude Code"), spans, project);
 }
 
 function parseProjectSession(filePath: string, events: JsonRecord[]): Trace | null {
@@ -148,7 +172,9 @@ function parseProjectSession(filePath: string, events: JsonRecord[]): Trace | nu
   const traceId = `cc_${sessionIdFromFile(filePath)}`;
   let title = "";
   let index = 0;
-  const project = decodeProjectName(basename(dirname(filePath)));
+  const project = projectFromSessionFile(filePath, events);
+  let currentUserId: string | null = null;
+  let lastSpanId: string | null = null;
 
   for (const event of events) {
     const type = String(event.type ?? "");
@@ -178,10 +204,11 @@ function parseProjectSession(filePath: string, events: JsonRecord[]): Trace | nu
         const text = truncate(textOf(content));
         if (!text) continue;
         if (!title) title = text;
+        const id = `${traceId}_${++index}`;
         pushSpan(spans, {
-          id: `${traceId}_${++index}`,
+          id,
           traceId,
-          parentId: null,
+          parentId: lastSpanId,
           name: "User Message",
           type: "agent",
           agent: "Claude Code",
@@ -189,17 +216,19 @@ function parseProjectSession(filePath: string, events: JsonRecord[]): Trace | nu
           startedAt,
           input: { message: text },
         });
+        currentUserId = id;
+        lastSpanId = id;
       }
     } else if (type === "assistant") {
       const parts = Array.isArray(content) ? content : [{ type: "text", text: content }];
       for (const part of parts) {
-        const rec = asRecord(part) ?? { type: "text", text: part };
+        const rec: JsonRecord = asRecord(part) ?? { type: "text", text: part };
         if (rec.type === "tool_use") {
           const id = `${traceId}_${String(rec.id || index + 1)}`;
           pushSpan(spans, {
             id,
             traceId,
-            parentId: spans[0]?.id ?? null,
+            parentId: currentUserId ?? lastSpanId,
             name: String(rec.name || "Tool"),
             type: "tool",
             agent: "Claude Code",
@@ -207,14 +236,16 @@ function parseProjectSession(filePath: string, events: JsonRecord[]): Trace | nu
             startedAt,
             input: asRecord(rec.input) ?? undefined,
           });
+          lastSpanId = id;
           index += 1;
         } else if (rec.type === "text" || typeof rec.text === "string") {
           const text = truncate(textOf(rec.text));
           if (!text) continue;
+          const id = `${traceId}_${++index}`;
           pushSpan(spans, {
-            id: `${traceId}_${++index}`,
+            id,
             traceId,
-            parentId: spans[0]?.id ?? null,
+            parentId: currentUserId ?? lastSpanId,
             name: "LLM Response",
             type: "llm",
             agent: "Claude Code",
@@ -222,31 +253,34 @@ function parseProjectSession(filePath: string, events: JsonRecord[]): Trace | nu
             startedAt,
             output: { response: text },
           });
+          lastSpanId = id;
         }
       }
     }
   }
 
   if (spans.length === 0) return null;
-  return toTrace(traceId, title || `Claude Code · ${project}`, spans, project);
+  return toTrace(traceId, title || (project ? `Claude Code · ${project}` : "Claude Code"), spans, project);
 }
 
-function toTrace(traceId: string, name: string, spans: Span[], _source: string): Trace {
-  const finished = spans.map((span) => span.finishedAt || span.startedAt);
-  const start = Math.min(...spans.map((span) => new Date(span.startedAt).getTime()));
+function toTrace(traceId: string, name: string, spans: Span[], project?: string): Trace {
+  const prepared = prepareSpans(spans);
+  const finished = prepared.map((span) => span.finishedAt || span.startedAt);
+  const start = Math.min(...prepared.map((span) => new Date(span.startedAt).getTime()));
   const end = Math.max(...finished.map((value) => new Date(value).getTime()));
-  const hasError = spans.some((span) => span.status === "error");
-  for (const span of spans) {
-    if (span.status === "running") span.status = hasError ? "warning" : "success";
+  for (const span of prepared) {
+    if (span.status === "running") span.status = "success";
   }
   return {
     traceId,
-    name: name.length > 88 ? `${name.slice(0, 88)}…` : name,
-    status: hasError ? "failed" : "success",
+    name: pickRunTitle({ name, project, spans: prepared }),
+    source: "claude-code",
+    project,
+    status: inferRunStatus(prepared),
     startedAt: new Date(start).toISOString(),
     finishedAt: new Date(end).toISOString(),
     duration: Math.max(0, end - start),
-    spans,
+    spans: prepared,
   };
 }
 

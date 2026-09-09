@@ -16,7 +16,7 @@ export default function AppHeader() {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800/80 bg-[#0b0b0c] px-4">
       <div className="flex items-center gap-6">
-        <Link href="/dashboard" className="flex items-center" aria-label="deeptracer home">
+        <Link href="/" className="flex items-center" aria-label="deeptracer home">
           <Image
             src="/logo-dark.png"
             alt="deeptracer"

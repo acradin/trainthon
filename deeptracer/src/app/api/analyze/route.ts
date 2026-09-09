@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { Trace, RootCauseAnalysis, AnalysisResponse } from "@/types/trace";
 
-const DEFAULT_MODEL = "gpt-5";
+const DEFAULT_MODEL = "gpt-5.6-luna";
 const FALLBACK_MODEL = "gpt-4o";
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
@@ -95,7 +95,7 @@ async function callOpenAIWithRetry(
       lastError = error instanceof Error ? error : new Error(String(error));
       console.error(`Attempt ${attempt + 1}/${MAX_RETRIES} failed:`, lastError.message);
 
-      if (error instanceof OpenAI.APIError && error.status === 404 && currentModel === DEFAULT_MODEL) {
+      if (error instanceof OpenAI.APIError && error.status === 404 && currentModel !== FALLBACK_MODEL) {
         console.warn(`Model ${DEFAULT_MODEL} not available, falling back to ${FALLBACK_MODEL}`);
         currentModel = FALLBACK_MODEL;
         continue;

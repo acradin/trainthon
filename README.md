@@ -1,96 +1,129 @@
-# 🚄 Trainthon
+<p align="center">
+  <img src="deeptracer/public/logo.png" alt="DeepTracer" width="240" />
+</p>
 
-> **Train + Hackathon** — 달리는 기차 위에서 시작하는 24시간 해커톤 스타터 킷
+<p align="center">
+  <strong>Don’t debug the output. Trace the cause.</strong>
+</p>
 
-Cursor Korea 앰버서더 커뮤니티와 연세대학교 창업지원단이 함께하는 Trainthon을 위한 프로젝트 템플릿입니다.
+<p align="center">
+  Local-first debugger for Claude, GPT/Codex, and Cursor agent runs.<br />
+  Register the desktop apps on this machine, scan their session logs, and follow the DAG to the first off-intent step.
+</p>
 
-## 🎯 프로젝트 소개
+<p align="center">
+  <a href="https://github.com/acradin/trainthon"><img src="https://img.shields.io/badge/GitHub-acradin%2Ftrainthon-181717?logo=github" alt="GitHub" /></a>
+  &nbsp;
+  <img src="https://img.shields.io/badge/local--first-this%20machine-e0783a?labelColor=0b0b0c" alt="local-first" />
+  &nbsp;
+  <img src="https://img.shields.io/badge/agents-Claude%20%7C%20GPT%20%7C%20Cursor-3f3f46?labelColor=0b0b0c" alt="agents" />
+</p>
 
-이 템플릿은 Trainthon 참가자들이 빠르게 MVP를 개발할 수 있도록 설계되었습니다.
-
-- **Next.js 14** — App Router 기반 풀스택 프레임워크
-- **TypeScript** — 타입 안전성 보장
-- **Tailwind CSS** — 빠른 스타일링
-- **Cursor AI** — AI 페어 프로그래밍 최적화
-
-## 🚀 빠른 시작
-
-```bash
-# 의존성 설치
-npm install
-
-# 개발 서버 실행
-npm run dev
-
-# 빌드
-npm run build
-```
-
-브라우저에서 [http://localhost:3000](http://localhost:3000)을 열어 결과를 확인하세요.
-
-## 📁 프로젝트 구조
-
-```
-trainthon/
-├── src/
-│   ├── app/              # Next.js App Router
-│   │   ├── layout.tsx    # 루트 레이아웃
-│   │   ├── page.tsx      # 메인 페이지
-│   │   └── globals.css   # 글로벌 스타일
-│   ├── components/       # 재사용 컴포넌트
-│   │   └── ui/           # UI 컴포넌트
-│   └── lib/              # 유틸리티 함수
-├── public/               # 정적 파일
-├── package.json
-├── tsconfig.json
-├── tailwind.config.ts
-└── next.config.js
-```
-
-## 🛠️ Cursor와 함께 개발하기
-
-이 프로젝트는 Cursor AI IDE에 최적화되어 있습니다.
-
-### 추천 프롬프트
-
-```
-"이 프로젝트에 사용자 인증 기능을 추가해줘"
-"API 라우트를 만들어서 데이터베이스에 연결해줘"
-"반응형 네비게이션 바를 만들어줘"
-```
-
-## 📅 Trainthon 일정
-
-| 시간 | 활동 |
-|------|------|
-| 08:00 | 서울역 집결 |
-| 08:57 | KTX 출발, Cursor 모바일로 개발 시작 |
-| 13:00 | 강릉 도착, 데스크탑 개발 |
-| 20:00 | 야간 개발 & 멘토링 |
-| 09:30 (D+1) | 최종 제출 |
-| 10:15 | 데모 & 피칭 |
-
-## 🏆 심사 기준
-
-1. **완성도** — 실제 작동하는 MVP인가?
-2. **혁신성** — 아이디어가 참신한가?
-3. **기술력** — Cursor를 효과적으로 활용했는가?
-4. **발표력** — 3분 안에 핵심을 전달했는가?
-
-## 📝 라이선스
-
-MIT License
-
-## 🤝 기여하기
-
-Trainthon 프로젝트에 기여를 환영합니다!
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+<p align="center">
+  <a href="#deeptracer">English</a> · <a href="#한국어">한국어</a>
+</p>
 
 ---
 
-**Built with ❤️ by Cursor Korea Community**
+# DeepTracer
+
+Most agent tools show the last message. DeepTracer shows **why the run went off intent**.
+
+It is not a JSON paste box. You register desktop agents. A local Next.js server reads session files on **this computer** and turns them into runs:
+
+```text
+Register agents  →  scan sessions  →  Runs by project  →  DAG + Inspector
+```
+
+A hosted Vercel/Netlify site cannot open `~/.claude`, `~/.codex`, or `~/.cursor`. That is the product, not a limitation to work around.
+
+```mermaid
+flowchart TB
+  O[Orchestrator]
+  O --> R[Research]
+  O --> B[Browser]
+  R --> S[Vendor A pricing]
+  B --> T[Pricing table]
+```
+
+Nodes are **what a step obtained** — a source, a file, a page — not `Search ×4`. Sub-agents stay as branches. Review intent finds where the run drifted.
+
+## Who it reads
+
+| Agent | Desktop app | Logs |
+| --- | --- | --- |
+| Claude | Claude | `~/.claude/projects`, `~/.claude/transcripts` |
+| GPT | ChatGPT / Codex | `~/.codex/sessions` |
+| Cursor | Cursor | `~/.cursor/projects/*/agent-transcripts` |
+
+Only installed desktop apps are listed. Credentials, auth files, and SQLite chat DBs are ignored.
+
+## Quick start
+
+```bash
+git clone https://github.com/acradin/trainthon.git
+cd trainthon/deeptracer
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Register the agents on this machine. Runs appear without uploading JSON.
+
+Optional `deeptracer/.env.local` (do not commit):
+
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-luna
+```
+
+Review intent uses OpenAI when a key is present. Without it, traces still scan and open as a DAG. Supabase is optional; default storage is `~/.deeptracer`.
+
+## Screens
+
+| Path | Role |
+| --- | --- |
+| `/` | Product landing. Locale: Korea → Korean, otherwise English |
+| `/onboard` | Register desktop agents |
+| `/dashboard` | Runs, grouped by project |
+| `/trace/[id]` | Execution DAG, Inspector, Timeline |
+| `/agents` | Status + Scan now |
+| `/analyze` | Example traces and intent review |
+| `/import`, `/setup` | Manual JSON / OTLP fallbacks |
+
+## Privacy
+
+- Logs stay on the machine running `npm run dev`.
+- The scanner reads session transcripts only.
+- Nothing is uploaded unless you add your own OpenAI/Supabase keys.
+
+## Docs
+
+App code lives in [`deeptracer/`](deeptracer/).
+
+- [Product requirements](deeptracer/docs/PRD.md)
+- [Design system](deeptracer/docs/design-system.md)
+- [DAG guidelines](deeptracer/docs/DESIGN.md)
+- [App README](deeptracer/README.md)
+
+## Trainthon
+
+Built for Cursor Korea × Yonsei University Startup Support Group **Trainthon**.
+
+---
+
+# 한국어
+
+**출력을 디버깅하지 마세요. 원인을 추적하세요.**
+
+DeepTracer는 이 컴퓨터의 Claude, GPT, Cursor 데스크톱 로그를 읽어 실행을 DAG로 엽니다. JSON을 붙여넣는 제품이 아닙니다. 에이전트를 등록하면 로컬 세션을 스캔합니다.
+
+클라우드 배포만으로는 사용자 PC의 `~/.claude`, `~/.codex`, `~/.cursor`에 접근하지 못합니다. 로그를 읽는 주체는 브라우저가 아니라 **이 PC에서 돌아가는 Next 서버**입니다.
+
+```bash
+git clone https://github.com/acradin/trainthon.git
+cd trainthon/deeptracer
+npm install
+npm run dev
+```
+
+[http://localhost:3000](http://localhost:3000)에서 에이전트를 등록하세요. 한국이면 랜딩이 한글로, 그 외에는 영어로 열립니다.

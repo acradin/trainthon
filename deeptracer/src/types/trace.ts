@@ -21,6 +21,8 @@ export interface Trace {
   traceId: string;
   name: string;
   status: "success" | "failed" | "running";
+  source?: "claude-code" | "codex" | "cursor" | "example";
+  project?: string;
   startedAt: string;
   finishedAt?: string;
   duration?: number;

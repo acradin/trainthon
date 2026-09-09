@@ -1,6 +1,9 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { Span, Trace } from "@/types/trace";
+import { inferRunStatus, prepareSpans } from "@/lib/semantic-spans";
+import { pickRunTitle, isInjectedContext } from "@/lib/run-title";
+import { folderFromPath } from "@/lib/trace-source";
 
 const MAX_FILE_BYTES = 6_000_000;
 const MAX_LINES = 2500;
@@ -54,9 +57,17 @@ function sessionIdFromFile(filePath: string): string {
   return name.replace(/[^a-zA-Z0-9]/g, "").slice(-12);
 }
 
-function cwdName(cwd: unknown): string {
-  if (typeof cwd !== "string" || !cwd) return "Codex";
-  return cwd.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).at(-1) || "Codex";
+function cwdFromRows(rows: JsonRecord[]): string | undefined {
+  for (const row of rows) {
+    const payload = asRecord(row.payload);
+    const cwd =
+      folderFromPath(row.cwd) ||
+      folderFromPath(payload?.cwd) ||
+      folderFromPath(payload?.workdir) ||
+      folderFromPath(payload?.working_directory);
+    if (cwd) return cwd;
+  }
+  return undefined;
 }
 
 export function importCodexSessionFile(filePath: string): Trace | null {
@@ -80,11 +91,12 @@ export function importCodexSessionFile(filePath: string): Trace | null {
     const spans: Span[] = [];
     const traceId = `cx_${sessionIdFromFile(filePath)}`;
     let title = "";
-    let project = "Codex";
+    let project = cwdFromRows(rows);
     let startedAt = "";
     const callSpans = new Map<string, Span>();
     let index = 0;
     let rootId: string | null = null;
+    let lastId: string | null = null;
 
     const push = (span: Span) => {
       if (spans.length >= MAX_SPANS) return;
@@ -98,7 +110,7 @@ export function importCodexSessionFile(filePath: string): Trace | null {
       if (!startedAt) startedAt = ts;
 
       if (type === "session_meta") {
-        project = cwdName(payload.cwd);
+        project = folderFromPath(payload.cwd) ?? project;
         continue;
       }
 
@@ -106,10 +118,11 @@ export function importCodexSessionFile(filePath: string): Trace | null {
         const eventType = String(payload.type ?? "");
         if (eventType === "error") {
           const message = truncate(textOf(payload.message ?? payload.error ?? payload));
+          const id = `${traceId}_${++index}`;
           push({
-          id: `${traceId}_${++index}`,
+            id,
             traceId,
-            parentId: rootId,
+            parentId: rootId ?? lastId,
             name: "Error",
             type: "system",
             agent: "Codex",
@@ -117,6 +130,7 @@ export function importCodexSessionFile(filePath: string): Trace | null {
             startedAt: ts,
             error: message || "Codex error",
           });
+          lastId = id;
         }
         continue;
       }
@@ -128,21 +142,51 @@ export function importCodexSessionFile(filePath: string): Trace | null {
         const role = String(payload.role ?? "assistant");
         const content = truncate(textOf(payload.content));
         if (!content) continue;
-        if (role === "user" && !title) title = content;
+        const injected = role === "user" || role === "developer" ? isInjectedContext(content) : false;
+        if (role === "user" && !injected && !title) title = content;
         const id = `${traceId}_${++index}`;
-        if (!rootId) rootId = id;
-        push({
-          id,
-          traceId,
-          parentId: role === "user" ? null : rootId,
-          name: role === "user" ? "User Message" : "LLM Response",
-          type: role === "user" ? "agent" : "llm",
-          agent: "Codex",
-          status: "success",
-          startedAt: ts,
-          input: role === "user" ? { message: content } : undefined,
-          output: role !== "user" ? { response: content } : undefined,
-        });
+        if (role === "developer" || (role === "user" && injected)) {
+          push({
+            id,
+            traceId,
+            parentId: lastId,
+            name: "Context",
+            type: "memory",
+            agent: "Codex",
+            status: "success",
+            startedAt: ts,
+            input: { message: content },
+          });
+          lastId = id;
+        } else if (role === "user") {
+          push({
+            id,
+            traceId,
+            parentId: lastId,
+            name: "User Message",
+            type: "agent",
+            agent: "Codex",
+            status: "success",
+            startedAt: ts,
+            input: { message: content },
+          });
+          rootId = id;
+          lastId = id;
+        } else {
+          if (!rootId) rootId = id;
+          push({
+            id,
+            traceId,
+            parentId: rootId,
+            name: "LLM Response",
+            type: "llm",
+            agent: "Codex",
+            status: "success",
+            startedAt: ts,
+            output: { response: content },
+          });
+          lastId = id;
+        }
       } else if (itemType === "function_call" || itemType === "custom_tool_call" || itemType === "web_search_call") {
         const callId = `${traceId}_${String(payload.call_id || payload.id || index + 1)}`;
         const span: Span = {
@@ -159,6 +203,7 @@ export function importCodexSessionFile(filePath: string): Trace | null {
         };
         callSpans.set(callId, span);
         push(span);
+        lastId = callId;
         index += 1;
       } else if (itemType === "function_call_output" || itemType === "custom_tool_call_output" || itemType === "tool_search_output") {
         const callId = `${traceId}_${String(payload.call_id || "")}`;
@@ -176,22 +221,28 @@ export function importCodexSessionFile(filePath: string): Trace | null {
 
     if (spans.length === 0) return null;
 
-    const hasError = spans.some((span) => span.status === "error");
     for (const span of spans) {
       if (span.status === "running") span.status = "success";
     }
-    const start = Math.min(...spans.map((span) => new Date(span.startedAt).getTime()));
-    const end = Math.max(...spans.map((span) => new Date(span.finishedAt || span.startedAt).getTime()));
-    const name = title || `Codex · ${project}`;
+    const prepared = prepareSpans(spans);
+    const start = Math.min(...prepared.map((span) => new Date(span.startedAt).getTime()));
+    const end = Math.max(...prepared.map((span) => new Date(span.finishedAt || span.startedAt).getTime()));
+    const name = pickRunTitle({
+      name: title || (project ? `Codex · ${project}` : "Codex"),
+      project,
+      spans: prepared,
+    });
 
     return {
       traceId,
-      name: name.length > 88 ? `${name.slice(0, 88)}…` : name,
-      status: hasError ? "failed" : "success",
+      name,
+      source: "codex",
+      project,
+      status: inferRunStatus(prepared),
       startedAt: new Date(Number.isFinite(start) ? start : Date.now()).toISOString(),
       finishedAt: new Date(Number.isFinite(end) ? end : Date.now()).toISOString(),
       duration: Number.isFinite(end - start) ? Math.max(0, end - start) : undefined,
-      spans,
+      spans: prepared,
     };
   } catch (error) {
     console.error("Failed to parse Codex session", filePath, error);

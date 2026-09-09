@@ -2,21 +2,12 @@
 
 import { type ReactNode } from "react";
 import { Span } from "@/types/trace";
+import { evidenceCalls, evidenceResult, isUserTurn, spanKindLabel } from "@/lib/semantic-spans";
+import { presentSpanContent, type MentionedFile } from "@/lib/span-content";
 
 interface InspectorProps {
   span: Span;
   onClose: () => void;
-}
-
-function formatDateTime(dateString: string): string {
-  return new Date(dateString).toLocaleString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 }
 
 function formatDuration(ms?: number): string {
@@ -38,8 +29,8 @@ function statusLabel(status: Span["status"]): { text: string; className: string 
   }
 }
 
-function typeLabel(type: Span["type"]): string {
-  return type === "llm" ? "LLM" : type.charAt(0).toUpperCase() + type.slice(1);
+function typeLabel(span: Span): string {
+  return spanKindLabel(span);
 }
 
 function JsonBlock({ data, empty }: { data: unknown; empty: string }) {
@@ -54,6 +45,46 @@ function JsonBlock({ data, empty }: { data: unknown; empty: string }) {
   );
 }
 
+function TextBlock({ text, empty }: { text: string; empty: string }) {
+  if (!text) {
+    return <p className="text-[12px] italic text-zinc-600">{empty}</p>;
+  }
+  return (
+    <p className="max-h-52 overflow-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-300">
+      {text}
+    </p>
+  );
+}
+
+function FileList({ files }: { files: MentionedFile[] }) {
+  if (files.length === 0) return null;
+  return (
+    <ul className="space-y-1.5">
+      {files.map((file) => (
+        <li key={file.path || file.name} className="min-w-0">
+          <div className="truncate text-[13px] text-zinc-200">{file.name}</div>
+          {file.path ? (
+            <div className="truncate font-mono text-[11px] text-zinc-500" title={file.path}>
+              {file.path}
+            </div>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function isProseSpan(span: Span): boolean {
+  return (
+    isUserTurn(span) ||
+    span.name === "Context" ||
+    span.name === "LLM Response" ||
+    span.type === "memory" ||
+    span.type === "agent" ||
+    span.type === "llm"
+  );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
@@ -65,13 +96,19 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export default function Inspector({ span, onClose }: InspectorProps) {
   const status = statusLabel(span.status);
+  const calls = evidenceCalls(span);
+  const result = evidenceResult(span);
+  const prose = isProseSpan(span);
+  const asked = presentSpanContent(span.input);
+  const got = presentSpanContent(result);
+  const askedLabel = span.name === "Context" || span.type === "memory" ? "Context" : "Asked";
 
   return (
     <aside className="flex h-full w-[28%] min-w-[280px] max-w-[380px] flex-col border-l border-zinc-800/80 bg-[#111113]">
       <div className="flex items-start justify-between gap-3 border-b border-zinc-800/80 px-4 py-3">
         <div className="min-w-0">
           <h2 className="truncate text-[14px] font-medium text-zinc-100">{span.name}</h2>
-          <p className="mt-0.5 text-[11px] text-zinc-500">{typeLabel(span.type)}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500">{typeLabel(span)}</p>
         </div>
         <button
           onClick={onClose}
@@ -97,21 +134,55 @@ export default function Inspector({ span, onClose }: InspectorProps) {
         </Field>
         <Field label="Duration">{formatDuration(span.duration)}</Field>
         {span.agent && <Field label="Agent">{span.agent}</Field>}
-        <Field label="Span ID">
-          <span className="font-mono text-[12px] text-zinc-400">{span.id}</span>
-        </Field>
-        <Field label="Started">{formatDateTime(span.startedAt)}</Field>
-        {span.finishedAt && <Field label="Finished">{formatDateTime(span.finishedAt)}</Field>}
+        {calls.length > 1 ? (
+          <Field label="Calls">
+            <ul className="space-y-1">
+              {calls.map((call, index) => (
+                <li key={`${call.name}-${index}`} className="flex items-baseline justify-between gap-2 text-[12px]">
+                  <span className="min-w-0 truncate text-zinc-400">{call.name}</span>
+                  <span className="shrink-0 text-zinc-600">{call.status}</span>
+                </li>
+              ))}
+            </ul>
+          </Field>
+        ) : null}
 
-        <div className="border-t border-zinc-800/80 pt-4">
-          <Field label="Input">
-            <JsonBlock data={span.input} empty="No input" />
-          </Field>
-        </div>
-        <div>
-          <Field label="Output">
-            <JsonBlock data={span.output} empty="No output" />
-          </Field>
+        <div className="space-y-5 border-t border-zinc-800/80 pt-4">
+          {prose ? (
+            <>
+              {asked.text || asked.files.length === 0 ? (
+                <Field label={askedLabel}>
+                  <TextBlock text={asked.text} empty="No input" />
+                </Field>
+              ) : null}
+              {asked.files.length > 0 ? (
+                <Field label="Files">
+                  <FileList files={asked.files} />
+                </Field>
+              ) : null}
+              {got.text || got.files.length > 0 || span.type === "llm" ? (
+                <>
+                  <Field label="Got">
+                    <TextBlock text={got.text} empty="No result" />
+                  </Field>
+                  {got.files.length > 0 ? (
+                    <Field label="Files">
+                      <FileList files={got.files} />
+                    </Field>
+                  ) : null}
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Field label="Asked">
+                <JsonBlock data={span.input} empty="No input" />
+              </Field>
+              <Field label="Got">
+                <JsonBlock data={result} empty="No result" />
+              </Field>
+            </>
+          )}
         </div>
       </div>
     </aside>
